@@ -126,6 +126,7 @@ export function AppShell({
         </footer>
       </div>
     </div>
+    </AuthGate>
   );
 }
 
