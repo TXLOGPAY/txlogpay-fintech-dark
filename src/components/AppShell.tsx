@@ -1,8 +1,10 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutGrid, Globe, Wallet, Scale, Settings, Search, Bell, HelpCircle, LogOut, Plus,
 } from "lucide-react";
 import { Logo } from "./Logo";
+import { AuthGate } from "./AuthGate";
+import { useAuth, signOut } from "@/hooks/use-auth";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
