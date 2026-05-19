@@ -79,11 +79,18 @@ export function AppShell({
         </Link>
 
         <div className="mt-6 flex items-center gap-3 p-3 rounded-xl glass">
-          <div className="h-9 w-9 rounded-full grid place-items-center font-semibold text-sm" style={{ background: "var(--gradient-brand)" }}>JD</div>
-          <div className="text-xs">
-            <div className="font-semibold text-foreground">João Dantas</div>
-            <div className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">Admin Global</div>
+          <div className="h-9 w-9 rounded-full grid place-items-center font-semibold text-sm shrink-0" style={{ background: "var(--gradient-brand)" }}>{initials}</div>
+          <div className="text-xs min-w-0 flex-1">
+            <div className="font-semibold text-foreground truncate">{displayName}</div>
+            <div className="text-muted-foreground font-mono uppercase tracking-wider text-[10px] truncate">{email || "Admin Global"}</div>
           </div>
+          <button
+            onClick={handleSignOut}
+            title="Sair"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </aside>
 
