@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as PagamentosRouteImport } from './routes/pagamentos'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -23,6 +24,11 @@ import { Route as OperacoesIdRouteImport } from './routes/operacoes.$id'
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PagamentosRoute = PagamentosRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
+  '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/operacoes/$id': typeof OperacoesIdRoute
   '/operacoes/conectar': typeof OperacoesConectarRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
+  '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/operacoes/$id': typeof OperacoesIdRoute
   '/operacoes/conectar': typeof OperacoesConectarRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/pagamentos': typeof PagamentosRoute
+  '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/operacoes/$id': typeof OperacoesIdRoute
   '/operacoes/conectar': typeof OperacoesConectarRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/pagamentos'
+    | '/signup'
     | '/sitemap.xml'
     | '/operacoes/$id'
     | '/operacoes/conectar'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/pagamentos'
+    | '/signup'
     | '/sitemap.xml'
     | '/operacoes/$id'
     | '/operacoes/conectar'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/login'
     | '/pagamentos'
+    | '/signup'
     | '/sitemap.xml'
     | '/operacoes/$id'
     | '/operacoes/conectar'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   PagamentosRoute: typeof PagamentosRoute
+  SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   OperacoesIdRoute: typeof OperacoesIdRoute
   OperacoesConectarRoute: typeof OperacoesConectarRoute
@@ -167,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pagamentos': {
@@ -242,6 +262,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   PagamentosRoute: PagamentosRoute,
+  SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   OperacoesIdRoute: OperacoesIdRoute,
   OperacoesConectarRoute: OperacoesConectarRoute,

@@ -1,8 +1,10 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutGrid, Globe, Wallet, Scale, Settings, Search, Bell, HelpCircle, LogOut, Plus,
 } from "lucide-react";
 import { Logo } from "./Logo";
+import { AuthGate } from "./AuthGate";
+import { useAuth, signOut } from "@/hooks/use-auth";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -20,7 +22,29 @@ export function AppShell({
   topbar?: React.ReactNode;
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const email = user?.email ?? "";
+  const displayName =
+    (user?.user_metadata?.full_name as string | undefined) ||
+    (user?.user_metadata?.name as string | undefined) ||
+    email.split("@")[0] ||
+    "Usuário";
+  const initials = displayName
+    .split(/[\s.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("") || "U";
+
+  async function handleSignOut() {
+    await signOut();
+    navigate({ to: "/login", replace: true });
+  }
+
   return (
+    <AuthGate>
     <div className="min-h-screen flex">
       {/* Sidebar */}
       <aside className="hidden lg:flex w-64 shrink-0 flex-col bg-sidebar border-r border-sidebar-border px-5 py-6 fixed h-screen">
@@ -55,11 +79,18 @@ export function AppShell({
         </Link>
 
         <div className="mt-6 flex items-center gap-3 p-3 rounded-xl glass">
-          <div className="h-9 w-9 rounded-full grid place-items-center font-semibold text-sm" style={{ background: "var(--gradient-brand)" }}>JD</div>
-          <div className="text-xs">
-            <div className="font-semibold text-foreground">João Dantas</div>
-            <div className="text-muted-foreground font-mono uppercase tracking-wider text-[10px]">Admin Global</div>
+          <div className="h-9 w-9 rounded-full grid place-items-center font-semibold text-sm shrink-0" style={{ background: "var(--gradient-brand)" }}>{initials}</div>
+          <div className="text-xs min-w-0 flex-1">
+            <div className="font-semibold text-foreground truncate">{displayName}</div>
+            <div className="text-muted-foreground font-mono uppercase tracking-wider text-[10px] truncate">{email || "Admin Global"}</div>
           </div>
+          <button
+            onClick={handleSignOut}
+            title="Sair"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </aside>
 
@@ -95,6 +126,7 @@ export function AppShell({
         </footer>
       </div>
     </div>
+    </AuthGate>
   );
 }
 
