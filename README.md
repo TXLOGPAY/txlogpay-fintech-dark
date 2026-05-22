@@ -179,7 +179,7 @@ npm install
 
 ---
 
-## Executar Ambiente Local
+## Executar Ambiente Local.
 
 ```bash
 npm run dev
