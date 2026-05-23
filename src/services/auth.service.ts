@@ -11,13 +11,13 @@ export const authService = {
     return supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+      options: { emailRedirectTo:"https://beta.txlogpay.com/dashboard" },
     });
   },
 
   async signInWithGoogle(redirectPath = "/dashboard") {
     return lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin + redirectPath,
+      redirect_uri: "https://beta.txlogpay.com/dashboard" + redirectPath,
     });
   },
 
