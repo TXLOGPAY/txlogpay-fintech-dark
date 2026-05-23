@@ -59,8 +59,8 @@ function NovaOperacao() {
     return true;
   }, [step, commercial, documents, bank, guarantee]);
 
-  const next = () => setStep((s) => Math.min(4, (s + 1) as StepIndex));
-  const prev = () => setStep((s) => Math.max(0, (s - 1) as StepIndex));
+  const next = () => setStep((s) => (Math.min(4, s + 1) as StepIndex));
+  const prev = () => setStep((s) => (Math.max(0, s - 1) as StepIndex));
 
   async function handleActivate() {
     setSubmitting(true);
