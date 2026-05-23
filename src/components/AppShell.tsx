@@ -128,6 +128,16 @@ export function AppShell({
               <span className="pulse-dot before:inline-block before:mr-1.5"></span>
               UTC-3 São Paulo
             </div>
+            <div className="hidden md:flex items-center gap-2 pl-3 ml-1 border-l border-border">
+              <span className={`chip ${tierBadge.className}`} title={`Tier ${tierBadge.label}`}>
+                {tierBadge.label}
+              </span>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={displayName} className="h-8 w-8 rounded-full object-cover ring-1 ring-border" />
+              ) : (
+                <div className="h-8 w-8 rounded-full grid place-items-center font-semibold text-xs" style={{ background: "var(--gradient-brand)" }}>{initials}</div>
+              )}
+            </div>
           </div>
         </header>
         <main className="flex-1 p-6 lg:p-10">{children}</main>
