@@ -1,19 +1,35 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useMemo, useState, useCallback, type ChangeEvent, type DragEvent } from "react";
+import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  FileText, CreditCard, Lock, ShieldCheck, Check, Upload, Banknote,
-  Building2, ArrowRight, ArrowLeft, Loader2, QrCode, Activity, Sparkles,
-  ClipboardCopy, FileCheck2, Globe2, Wallet, AlertCircle, Hash,
+  FileText, ShieldCheck, Check, Banknote, ArrowRight, ArrowLeft, Loader2,
+  QrCode, Activity, Sparkles, ClipboardCopy, FileCheck2, Globe2, Wallet,
+  AlertCircle, Hash, Lock, Building2, Search, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import {
-  INCOTERMS, CURRENCIES, RELEASE_STAGES,
-  type CommercialData, type OperationDocuments, type ExporterBank,
-  type Guarantee, type GuaranteeMethod, type DocumentRef, type Operation,
-} from "@/types/operation";
-import { operationsService, fileToRef, buildMockPixPayload } from "@/lib/operations/service";
+
+import { useOperationStore } from "@/stores/operation.store";
+import { useUserStore } from "@/stores/user.store";
+import { useFeeBreakdown } from "@/hooks/use-fee-breakdown";
+
+import { INCOTERMS, CURRENCIES, RELEASE_TRIGGERS, RELEASE_TRIGGER_LABELS, OPERATION_STATUS_META } from "@/domain/operation";
+import { USER_TIER_LABELS } from "@/domain/user";
+
+import { commercialSchema, documentationSchema } from "@/schemas/operation.schema";
+import { beneficiarySchema } from "@/schemas/beneficiary.schema";
+import { type UploadedFile } from "@/schemas/upload.schema";
+
+import { formatCurrency, maskCurrencyInput, parseCurrencyInput, maskIBAN, maskSWIFT, maskDUIMP, maskInvoice } from "@/lib/formatters";
+import { COUNTRIES, suggestCities } from "@/lib/countries";
+
+import { operationService } from "@/services/operation.service";
+import { escrowService } from "@/services/escrow.service";
+import { eventEngine } from "@/services/event-engine.service";
+
+import { FileDropzone } from "@/components/FileDropzone";
+
+import type { Operation, Currency, Incoterm, ReleaseTrigger } from "@/types";
 
 export const Route = createFileRoute("/operacoes/conectar")({
   head: () => ({ meta: [{ title: "Nova Operação — TXLOGPAY" }] }),
@@ -35,42 +51,123 @@ function NovaOperacao() {
   const navigate = useNavigate();
   const [step, setStep] = useState<StepIndex>(0);
   const [submitting, setSubmitting] = useState(false);
-  const [created, setCreated] = useState<Operation | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const [commercial, setCommercial] = useState<CommercialData>({
-    incoterm: "", valor: "", moeda: "USD", releaseStage: "",
-  });
-  const [documents, setDocuments] = useState<OperationDocuments>({
-    invoiceNumber: "", blAwb: "", duimp: "", siscomex: "",
-  });
-  const [bank, setBank] = useState<ExporterBank>({
-    exporterName: "", bank: "", swift: "", iban: "",
-    country: "", city: "", beneficiary: "",
-  });
-  const [guarantee, setGuarantee] = useState<Guarantee>({
-    method: "pix", status: "aguardando",
-  });
+  const tier = useUserStore((s) => s.tier);
+  const setTier = useUserStore((s) => s.setTier);
 
-  const stepValid = useMemo(() => {
-    if (step === 0) return !!commercial.incoterm && !!commercial.valor && !!commercial.releaseStage;
-    if (step === 1) return !!documents.invoiceNumber && !!documents.blAwb && !!documents.duimp;
-    if (step === 2) return !!bank.exporterName && !!bank.bank && !!bank.swift && !!bank.iban;
-    if (step === 3) return !!guarantee.method;
+  const commercial = useOperationStore((s) => s.commercial);
+  const documentation = useOperationStore((s) => s.documentation);
+  const beneficiary = useOperationStore((s) => s.beneficiary);
+  const guarantee = useOperationStore((s) => s.guarantee);
+  const current = useOperationStore((s) => s.current);
+
+  const setCommercial = useOperationStore((s) => s.setCommercial);
+  const setDocumentation = useOperationStore((s) => s.setDocumentation);
+  const setBeneficiary = useOperationStore((s) => s.setBeneficiary);
+  const setGuarantee = useOperationStore((s) => s.setGuarantee);
+  const setEscrow = useOperationStore((s) => s.setEscrow);
+  const setCurrent = useOperationStore((s) => s.setCurrent);
+
+  const breakdown = useFeeBreakdown(commercial.operation_value);
+
+  function validateStep(s: StepIndex): boolean {
+    setErrors({});
+    if (s === 0) {
+      const result = commercialSchema.safeParse({
+        incoterm: commercial.incoterm || undefined,
+        currency: commercial.currency,
+        operation_value: commercial.operation_value,
+        release_trigger: commercial.release_trigger || undefined,
+      });
+      if (!result.success) {
+        setErrors(flattenErrors(result.error));
+        return false;
+      }
+    }
+    if (s === 1) {
+      const result = documentationSchema.safeParse(documentation);
+      if (!result.success) {
+        setErrors(flattenErrors(result.error));
+        return false;
+      }
+    }
+    if (s === 2) {
+      const result = beneficiarySchema.safeParse(beneficiary);
+      if (!result.success) {
+        setErrors(flattenErrors(result.error));
+        return false;
+      }
+    }
     return true;
-  }, [step, commercial, documents, bank, guarantee]);
+  }
 
-  const next = () => setStep((s) => (Math.min(4, s + 1) as StepIndex));
+  const next = () => { if (validateStep(step)) setStep((s) => (Math.min(4, s + 1) as StepIndex)); };
   const prev = () => setStep((s) => (Math.max(0, s - 1) as StepIndex));
 
   async function handleActivate() {
+    if (!validateStep(3)) return;
     setSubmitting(true);
     try {
-      const op = await operationsService.create({
-        userId: user?.id ?? null,
-        commercial, documents, bank,
-        guarantee: { ...guarantee, status: "monitorando" },
+      const op = await operationService.create({
+        user_id: user?.id ?? null,
+        incoterm: commercial.incoterm as Incoterm,
+        currency: commercial.currency,
+        operation_value: commercial.operation_value,
+        release_trigger: commercial.release_trigger as ReleaseTrigger,
+        duimp: documentation.duimp,
+        invoice_number: documentation.invoice_number,
+        bl_awb: documentation.bl_awb,
+        siscomex_reference: documentation.siscomex_reference,
+        beneficiary: {
+          id: "tmp",
+          operation_id: "tmp",
+          exporter_name: beneficiary.exporter_name,
+          bank_name: beneficiary.bank_name,
+          swift: beneficiary.swift,
+          iban: beneficiary.iban,
+          beneficiary_name: beneficiary.beneficiary_name,
+          country: beneficiary.country,
+          city: beneficiary.city,
+        },
+        escrow: escrowService.create({
+          operation_id: "tmp",
+          gross_amount: commercial.operation_value,
+          currency: commercial.currency,
+          tier,
+        }),
+        status: "PENDING_FUNDING",
       });
-      setCreated(op);
+
+      // Transition through funding → review → monitoring with proper events.
+      let next1 = eventEngine.apply(op, {
+        event_type: "FUNDING_RECEIVED",
+        description: `Garantia operacional recebida via ${guarantee.method.toUpperCase()}`,
+        source: "USER",
+        transition: "FUNDING_RECEIVED",
+      });
+      next1 = eventEngine.apply(next1, {
+        event_type: "REVIEW_APPROVED",
+        description: "Validação operacional automática concluída",
+        source: "TXLOGPAY",
+        transition: "REVIEW_APPROVED",
+      });
+      next1 = eventEngine.apply(next1, {
+        event_type: "MONITORING_STARTED",
+        description: "Monitoramento de eventos aduaneiros iniciado",
+        source: "TXLOGPAY",
+        transition: "MONITORING_STARTED",
+      });
+      next1 = eventEngine.apply(next1, {
+        event_type: "ANCHOR_RESERVED",
+        description: "Fundos reservados no Stellar Anchor (mock)",
+        source: "ANCHOR",
+        transition: "MONITORING_STARTED",
+      });
+
+      await operationService.update(op.id, { events: next1.events, status: next1.status });
+      setEscrow(next1.escrow ?? null);
+      setCurrent(next1);
       setStep(4);
     } finally {
       setSubmitting(false);
@@ -93,9 +190,12 @@ function NovaOperacao() {
             garantia financeira e liquidação automática vinculada a eventos aduaneiros.
           </p>
         </div>
-        <span className="chip chip-cargo text-[11px]">
-          <ShieldCheck className="h-3.5 w-3.5" />Trade finance enterprise
-        </span>
+        <div className="flex items-center gap-2">
+          <TierSelector value={tier} onChange={setTier} />
+          <span className="chip chip-cargo text-[11px]">
+            <ShieldCheck className="h-3.5 w-3.5" />Trade finance enterprise
+          </span>
+        </div>
       </div>
 
       <Stepper current={step} />
@@ -110,11 +210,13 @@ function NovaOperacao() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25 }}
             >
-              {step === 0 && <Step1Commercial value={commercial} onChange={setCommercial} />}
-              {step === 1 && <Step2Documents value={documents} onChange={setDocuments} />}
-              {step === 2 && <Step3Bank value={bank} onChange={setBank} />}
-              {step === 3 && <Step4Guarantee value={guarantee} onChange={setGuarantee} commercial={commercial} />}
-              {step === 4 && created && <Step5Activated op={created} onGo={() => navigate({ to: "/operacoes/$id", params: { id: created.id } })} />}
+              {step === 0 && <Step1Commercial errors={errors} />}
+              {step === 1 && <Step2Documents errors={errors} />}
+              {step === 2 && <Step3Bank errors={errors} />}
+              {step === 3 && <Step4Guarantee />}
+              {step === 4 && current && (
+                <Step5Activated op={current} onGo={() => navigate({ to: "/operacoes/$id", params: { id: current.id } })} />
+              )}
             </motion.div>
           </AnimatePresence>
 
@@ -131,15 +233,14 @@ function NovaOperacao() {
               {step < 3 ? (
                 <button
                   onClick={next}
-                  disabled={!stepValid}
-                  className="btn-primary inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold"
                 >
                   Continuar <ArrowRight className="h-4 w-4" />
                 </button>
               ) : (
                 <button
                   onClick={handleActivate}
-                  disabled={submitting || !stepValid}
+                  disabled={submitting}
                   className="btn-primary inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
                 >
                   {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Ativando...</> : <><ShieldCheck className="h-4 w-4" /> Ativar Operação</>}
@@ -149,10 +250,24 @@ function NovaOperacao() {
           )}
         </div>
 
-        <SidePanel step={step} commercial={commercial} />
+        <SidePanel
+          step={step}
+          breakdown={breakdown}
+          currency={commercial.currency}
+          tier={tier}
+        />
       </div>
     </AppShell>
   );
+}
+
+function flattenErrors(err: import("zod").ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of err.issues) {
+    const k = issue.path.join(".") || "_";
+    if (!out[k]) out[k] = issue.message;
+  }
+  return out;
 }
 
 /* ----------------------------- Stepper ----------------------------- */
@@ -198,11 +313,9 @@ function Stepper({ current }: { current: StepIndex }) {
 
 /* ----------------------------- Step 1: Commercial ----------------------------- */
 
-function Step1Commercial({ value, onChange }: {
-  value: CommercialData; onChange: (v: CommercialData) => void;
-}) {
-  const set = <K extends keyof CommercialData>(k: K, v: CommercialData[K]) =>
-    onChange({ ...value, [k]: v });
+function Step1Commercial({ errors }: { errors: Record<string, string> }) {
+  const commercial = useOperationStore((s) => s.commercial);
+  const setCommercial = useOperationStore((s) => s.setCommercial);
 
   return (
     <div className="card-surface p-6 space-y-6">
@@ -214,42 +327,60 @@ function Step1Commercial({ value, onChange }: {
       </header>
 
       <div className="grid md:grid-cols-2 gap-5">
-        <Field label="Incoterm">
-          <Select value={value.incoterm} onChange={(v) => set("incoterm", v as CommercialData["incoterm"])}
-            options={[{ value: "", label: "Selecione..." }, ...INCOTERMS.map((i) => ({ value: i, label: i }))]} />
+        <Field label="Incoterm" error={errors.incoterm}>
+          <Select
+            value={commercial.incoterm}
+            onChange={(v) => setCommercial({ incoterm: v as Incoterm | "" })}
+            options={[{ value: "", label: "Selecione..." }, ...INCOTERMS.map((i) => ({ value: i, label: i }))]}
+          />
         </Field>
 
-        <Field label="Moeda">
-          <Select value={value.moeda} onChange={(v) => set("moeda", v as CommercialData["moeda"])}
-            options={CURRENCIES.map((c) => ({ value: c, label: c }))} />
+        <Field label="Moeda" error={errors.currency}>
+          <Select
+            value={commercial.currency}
+            onChange={(v) => setCommercial({ currency: v as Currency })}
+            options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+          />
         </Field>
 
-        <Field label="Valor da operação" className="md:col-span-2">
+        <Field label="Valor da operação" className="md:col-span-2" error={errors.operation_value}>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground">{value.moeda}</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground">{commercial.currency}</span>
             <Input
-              className="pl-14 text-lg font-semibold"
-              placeholder="0,00"
+              className="pl-14 text-lg font-semibold font-mono"
+              placeholder="0.00"
               inputMode="decimal"
-              value={value.valor}
-              onChange={(e) => set("valor", e.target.value)}
+              value={commercial.operation_value_input}
+              onChange={(e) => {
+                const masked = maskCurrencyInput(e.target.value);
+                setCommercial({
+                  operation_value_input: masked,
+                  operation_value: parseCurrencyInput(masked),
+                });
+              }}
             />
           </div>
+          {commercial.operation_value > 0 && (
+            <div className="mt-1.5 text-[11px] font-mono text-muted-foreground">
+              {formatCurrency(commercial.operation_value, commercial.currency)}
+            </div>
+          )}
         </Field>
       </div>
 
       <div>
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
-          Etapa de liberação automática do pagamento
+          Trigger de liberação automática
         </div>
         <div className="grid sm:grid-cols-2 gap-2.5">
-          {RELEASE_STAGES.map((s) => {
-            const active = value.releaseStage === s.value;
+          {RELEASE_TRIGGERS.map((trg) => {
+            const meta = RELEASE_TRIGGER_LABELS[trg];
+            const active = commercial.release_trigger === trg;
             return (
               <button
-                key={s.value}
+                key={trg}
                 type="button"
-                onClick={() => set("releaseStage", s.value)}
+                onClick={() => setCommercial({ release_trigger: trg })}
                 className={
                   "text-left rounded-xl px-4 py-3 border transition-all " +
                   (active
@@ -258,18 +389,19 @@ function Step1Commercial({ value, onChange }: {
                 }
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-sm">{s.label}</span>
-                  {active && <Check className="h-4 w-4 text-secondary" />}
+                  <span className="font-semibold text-sm">{meta.label}</span>
+                  <span className="font-mono text-[9px] text-muted-foreground">{trg}</span>
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">{s.desc}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{meta.desc}</div>
               </button>
             );
           })}
         </div>
+        {errors.release_trigger && <ErrorMsg msg={errors.release_trigger} />}
       </div>
 
       <Callout icon={Activity}>
-        O pagamento será liberado automaticamente quando o evento operacional selecionado for confirmado.
+        O pagamento será liberado automaticamente quando o evento operacional selecionado for confirmado via Siscomex.
       </Callout>
     </div>
   );
@@ -277,11 +409,12 @@ function Step1Commercial({ value, onChange }: {
 
 /* ----------------------------- Step 2: Documents ----------------------------- */
 
-function Step2Documents({ value, onChange }: {
-  value: OperationDocuments; onChange: (v: OperationDocuments) => void;
-}) {
-  const set = <K extends keyof OperationDocuments>(k: K, v: OperationDocuments[K]) =>
-    onChange({ ...value, [k]: v });
+function Step2Documents({ errors }: { errors: Record<string, string> }) {
+  const documentation = useOperationStore((s) => s.documentation);
+  const setDocumentation = useOperationStore((s) => s.setDocumentation);
+  const [invoiceFile, setInvoiceFile] = useState<UploadedFile | undefined>();
+  const [packingFile, setPackingFile] = useState<UploadedFile | undefined>();
+  const [blFile, setBlFile] = useState<UploadedFile | undefined>();
 
   return (
     <div className="card-surface p-6 space-y-6">
@@ -293,84 +426,58 @@ function Step2Documents({ value, onChange }: {
       </header>
 
       <div className="grid md:grid-cols-2 gap-5">
-        <Field label="Número da Invoice">
-          <Input value={value.invoiceNumber} onChange={(e) => set("invoiceNumber", e.target.value)} placeholder="INV-2024-XXXXX" />
+        <Field label="Número da Invoice" error={errors.invoice_number}>
+          <Input
+            value={documentation.invoice_number}
+            onChange={(e) => setDocumentation({ invoice_number: maskInvoice(e.target.value) })}
+            placeholder="INV-2024-XXXXX"
+            className="font-mono"
+          />
         </Field>
-        <Field label="Bill of Lading / AWB">
-          <Input value={value.blAwb} onChange={(e) => set("blAwb", e.target.value)} placeholder="HLCUBSC..." />
+        <Field label="Bill of Lading / AWB" error={errors.bl_awb}>
+          <Input
+            value={documentation.bl_awb}
+            onChange={(e) => setDocumentation({ bl_awb: e.target.value.toUpperCase() })}
+            placeholder="HLCUBSC..."
+            className="font-mono"
+          />
         </Field>
-        <Field label="Número DUIMP">
-          <Input value={value.duimp} onChange={(e) => set("duimp", e.target.value)} placeholder="24/0000000-0" />
+        <Field label="Número DUIMP" error={errors.duimp}>
+          <Input
+            value={documentation.duimp}
+            onChange={(e) => setDocumentation({ duimp: maskDUIMP(e.target.value) })}
+            placeholder="24/0000000-0"
+            className="font-mono"
+          />
         </Field>
-        <Field label="Número do processo Siscomex">
-          <Input value={value.siscomex} onChange={(e) => set("siscomex", e.target.value)} placeholder="SISCOMEX-..." />
+        <Field label="Referência Siscomex" error={errors.siscomex_reference}>
+          <Input
+            value={documentation.siscomex_reference}
+            onChange={(e) => setDocumentation({ siscomex_reference: e.target.value })}
+            placeholder="SISCOMEX-..."
+            className="font-mono"
+          />
         </Field>
       </div>
 
       <div className="space-y-3">
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Anexos</div>
         <div className="grid md:grid-cols-3 gap-3">
-          <Dropzone label="Invoice (PDF)" file={value.invoiceFile} onFile={(f) => set("invoiceFile", f)} />
-          <Dropzone label="Packing List" file={value.packingFile} onFile={(f) => set("packingFile", f)} />
-          <Dropzone label="BL / AWB" file={value.blAwbFile} onFile={(f) => set("blAwbFile", f)} />
+          <FileDropzone label="Invoice" value={invoiceFile} onChange={setInvoiceFile} />
+          <FileDropzone label="Packing List" value={packingFile} onChange={setPackingFile} />
+          <FileDropzone label="BL / AWB" value={blFile} onChange={setBlFile} />
         </div>
       </div>
     </div>
   );
 }
 
-function Dropzone({ label, file, onFile }: {
-  label: string; file?: DocumentRef; onFile: (f: DocumentRef | undefined) => void;
-}) {
-  const [over, setOver] = useState(false);
-  const onDrop = (e: DragEvent<HTMLLabelElement>) => {
-    e.preventDefault(); setOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) onFile(fileToRef(f));
-  };
-  const onPick = (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) onFile(fileToRef(f));
-  };
-  return (
-    <label
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={onDrop}
-      className={
-        "relative flex flex-col items-center justify-center gap-2 rounded-xl p-5 border-2 border-dashed cursor-pointer transition-all min-h-[140px] text-center " +
-        (over
-          ? "border-secondary bg-secondary/10"
-          : file
-            ? "border-success/50 bg-success/5"
-            : "border-border hover:border-secondary/50 hover:bg-surface-container")
-      }
-    >
-      <input type="file" className="hidden" onChange={onPick} accept=".pdf,.png,.jpg,.jpeg" />
-      {file ? (
-        <>
-          <FileCheck2 className="h-6 w-6 text-secondary" />
-          <div className="text-xs font-medium truncate max-w-full">{file.name}</div>
-          <div className="font-mono text-[10px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</div>
-        </>
-      ) : (
-        <>
-          <Upload className="h-6 w-6 text-muted-foreground" />
-          <div className="text-xs font-medium">{label}</div>
-          <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Arraste ou clique</div>
-        </>
-      )}
-    </label>
-  );
-}
-
 /* ----------------------------- Step 3: Bank ----------------------------- */
 
-function Step3Bank({ value, onChange }: {
-  value: ExporterBank; onChange: (v: ExporterBank) => void;
-}) {
-  const set = <K extends keyof ExporterBank>(k: K, v: ExporterBank[K]) =>
-    onChange({ ...value, [k]: v });
+function Step3Bank({ errors }: { errors: Record<string, string> }) {
+  const beneficiary = useOperationStore((s) => s.beneficiary);
+  const setBeneficiary = useOperationStore((s) => s.setBeneficiary);
+  const cityHints = useMemo(() => suggestCities(beneficiary.country), [beneficiary.country]);
 
   return (
     <div className="card-surface p-6 space-y-6">
@@ -382,50 +489,119 @@ function Step3Bank({ value, onChange }: {
       </header>
 
       <div className="grid md:grid-cols-2 gap-5">
-        <Field label="Nome do exportador" className="md:col-span-2">
-          <Input value={value.exporterName} onChange={(e) => set("exporterName", e.target.value)} placeholder="Acme Industries Ltd." />
+        <Field label="Nome do exportador" className="md:col-span-2" error={errors.exporter_name}>
+          <Input value={beneficiary.exporter_name} onChange={(e) => setBeneficiary({ exporter_name: e.target.value })} placeholder="Acme Industries Ltd." />
         </Field>
-        <Field label="Banco">
-          <Input value={value.bank} onChange={(e) => set("bank", e.target.value)} placeholder="HSBC Hong Kong" />
+        <Field label="Banco" error={errors.bank_name}>
+          <Input value={beneficiary.bank_name} onChange={(e) => setBeneficiary({ bank_name: e.target.value })} placeholder="HSBC Hong Kong" />
         </Field>
-        <Field label="SWIFT / BIC">
-          <Input value={value.swift} onChange={(e) => set("swift", e.target.value)} placeholder="HSBCHKHHHKH" className="font-mono uppercase" />
+        <Field label="SWIFT / BIC" error={errors.swift}>
+          <Input
+            value={beneficiary.swift}
+            onChange={(e) => setBeneficiary({ swift: maskSWIFT(e.target.value) })}
+            placeholder="HSBCHKHHHKH"
+            className="font-mono uppercase"
+          />
         </Field>
-        <Field label="IBAN / Conta">
-          <Input value={value.iban} onChange={(e) => set("iban", e.target.value)} placeholder="HK00 0000 0000 0000" className="font-mono" />
+        <Field label="IBAN / Conta" error={errors.iban}>
+          <Input
+            value={beneficiary.iban}
+            onChange={(e) => setBeneficiary({ iban: maskIBAN(e.target.value) })}
+            placeholder="HK00 0000 0000 0000"
+            className="font-mono"
+          />
         </Field>
-        <Field label="Beneficiário">
-          <Input value={value.beneficiary} onChange={(e) => set("beneficiary", e.target.value)} placeholder="Nome do beneficiário" />
+        <Field label="Beneficiário" error={errors.beneficiary_name}>
+          <Input value={beneficiary.beneficiary_name} onChange={(e) => setBeneficiary({ beneficiary_name: e.target.value })} placeholder="Nome do beneficiário" />
         </Field>
-        <Field label="País">
-          <Input value={value.country} onChange={(e) => set("country", e.target.value)} placeholder="Hong Kong" />
+        <Field label="País" error={errors.country}>
+          <CountryCombobox value={beneficiary.country} onChange={(v) => setBeneficiary({ country: v, city: "" })} />
         </Field>
-        <Field label="Cidade">
-          <Input value={value.city} onChange={(e) => set("city", e.target.value)} placeholder="Kowloon" />
+        <Field label="Cidade" error={errors.city}>
+          <Input
+            value={beneficiary.city}
+            onChange={(e) => setBeneficiary({ city: e.target.value })}
+            placeholder="Cidade"
+            list="city-hints"
+          />
+          <datalist id="city-hints">
+            {cityHints.map((c) => <option key={c} value={c} />)}
+          </datalist>
         </Field>
       </div>
     </div>
   );
 }
 
-/* ----------------------------- Step 4: Guarantee ----------------------------- */
-
-function Step4Guarantee({ value, onChange, commercial }: {
-  value: Guarantee; onChange: (v: Guarantee) => void;
-  commercial: CommercialData;
-}) {
-  const set = <K extends keyof Guarantee>(k: K, v: Guarantee[K]) =>
-    onChange({ ...value, [k]: v });
-
-  const pixPayload = useMemo(
-    () => buildMockPixPayload(commercial.valor || "0", commercial.incoterm || "OP"),
-    [commercial.valor, commercial.incoterm],
+function CountryCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(
+    () => COUNTRIES.filter((c) => c.name.toLowerCase().includes(query.toLowerCase())),
+    [query],
   );
 
-  const methods: { id: GuaranteeMethod; label: string; icon: typeof CreditCard; hint: string }[] = [
-    { id: "pix",   label: "PIX",                     icon: QrCode,  hint: "Instantâneo · BRL" },
-    { id: "ted",   label: "Transferência bancária",  icon: Wallet,  hint: "Doméstica · 1h" },
-    { id: "swift", label: "SWIFT internacional",     icon: Globe2,  hint: "Cross-border · 12-24h" },
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full bg-surface-container-low border border-border rounded-lg px-3 py-2.5 text-sm flex items-center justify-between hover:border-secondary/50"
+      >
+        <span className={value ? "" : "text-muted-foreground"}>{value || "Selecione um país"}</span>
+        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full rounded-lg border border-border bg-surface-container shadow-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar país..."
+              className="bg-transparent outline-none text-sm w-full"
+            />
+          </div>
+          <ul className="max-h-56 overflow-y-auto">
+            {filtered.map((c) => (
+              <li key={c.code}>
+                <button
+                  type="button"
+                  onClick={() => { onChange(c.name); setOpen(false); setQuery(""); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-surface-container-low flex items-center justify-between"
+                >
+                  <span>{c.name}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{c.code}</span>
+                </button>
+              </li>
+            ))}
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-xs text-muted-foreground">Nenhum país encontrado</li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ----------------------------- Step 4: Guarantee ----------------------------- */
+
+function Step4Guarantee() {
+  const guarantee = useOperationStore((s) => s.guarantee);
+  const setGuarantee = useOperationStore((s) => s.setGuarantee);
+  const commercial = useOperationStore((s) => s.commercial);
+
+  const pixPayload = useMemo(
+    () => `00020126TXLOGPAY${(commercial.incoterm || "OP").slice(0, 8)}520400005303986540${commercial.operation_value.toFixed(2)}5802BR6009SAO PAULO6304ABCD`,
+    [commercial.operation_value, commercial.incoterm],
+  );
+
+  const methods = [
+    { id: "pix"   as const, label: "PIX",                    icon: QrCode,  hint: "Instantâneo · BRL" },
+    { id: "ted"   as const, label: "Transferência bancária", icon: Wallet,  hint: "Doméstica · 1h" },
+    { id: "swift" as const, label: "SWIFT internacional",    icon: Globe2,  hint: "Cross-border · 12-24h" },
   ];
 
   return (
@@ -435,16 +611,16 @@ function Step4Guarantee({ value, onChange, commercial }: {
           <ShieldCheck className="h-4 w-4 text-secondary" /> Garantia Operacional
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Reserva financeira vinculada à operação internacional. Liberada automaticamente após o evento aduaneiro.
+          Reserva financeira vinculada à operação. Liberada automaticamente após o evento aduaneiro selecionado.
         </p>
       </header>
 
       <div className="grid sm:grid-cols-3 gap-2.5">
         {methods.map((m) => {
-          const active = value.method === m.id;
+          const active = guarantee.method === m.id;
           const Icon = m.icon;
           return (
-            <button key={m.id} type="button" onClick={() => set("method", m.id)}
+            <button key={m.id} type="button" onClick={() => setGuarantee({ method: m.id })}
               className={
                 "rounded-xl border p-4 text-left transition-all " +
                 (active
@@ -459,7 +635,7 @@ function Step4Guarantee({ value, onChange, commercial }: {
         })}
       </div>
 
-      {value.method === "pix" && (
+      {guarantee.method === "pix" ? (
         <div className="grid md:grid-cols-2 gap-5">
           <div className="rounded-xl glass p-5">
             <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">QRCode PIX dinâmico</div>
@@ -474,29 +650,35 @@ function Step4Guarantee({ value, onChange, commercial }: {
               <ClipboardCopy className="h-4 w-4" /> Pix copia e cola
             </button>
           </div>
-          <div className="space-y-3">
-            <UploadReceipt value={value.receiptFile} onChange={(f) => set("receiptFile", f)} />
-            <StatusBlock guarantee={value} />
+          <div className="rounded-xl glass p-5 space-y-3 text-sm">
+            <div className="font-semibold flex items-center gap-2">
+              <Lock className="h-4 w-4 text-secondary" /> Aguardando confirmação
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Assim que o depósito for confirmado, a operação avança para análise e iniciamos o monitoramento dos eventos aduaneiros.
+            </p>
           </div>
         </div>
-      )}
-
-      {value.method !== "pix" && (
+      ) : (
         <div className="grid md:grid-cols-2 gap-5">
           <div className="rounded-xl glass p-5 space-y-3 text-sm">
             <div className="font-semibold flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-secondary" /> Dados para {value.method === "ted" ? "TED" : "SWIFT"}
+              <Building2 className="h-4 w-4 text-secondary" /> Dados para {guarantee.method === "ted" ? "TED" : "SWIFT"}
             </div>
             <KV k="Banco parceiro" v="Standard Chartered (Global)" />
             <KV k="SWIFT / BIC" v="TXLPBRSPXXX" mono />
             <KV k="Conta operacional" v="8829-00129-2192-0" mono />
             <div className="p-3 rounded-lg bg-surface-container-low text-xs text-muted-foreground">
-              Tempo estimado: {value.method === "ted" ? "até 1h útil" : "12-24h úteis"} para conciliação.
+              Tempo estimado: {guarantee.method === "ted" ? "até 1h útil" : "12-24h úteis"} para conciliação.
             </div>
           </div>
-          <div className="space-y-3">
-            <UploadReceipt value={value.receiptFile} onChange={(f) => set("receiptFile", f)} />
-            <StatusBlock guarantee={value} />
+          <div className="rounded-xl glass p-5 space-y-3 text-sm">
+            <div className="font-semibold flex items-center gap-2">
+              <Lock className="h-4 w-4 text-secondary" /> Garantia em custódia digital
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Os fundos são reservados no Stellar Anchor (mock) e liberados via Smart Contract Settlement quando o trigger ocorrer.
+            </p>
           </div>
         </div>
       )}
@@ -505,7 +687,6 @@ function Step4Guarantee({ value, onChange, commercial }: {
 }
 
 function PixQR({ seed }: { seed: string }) {
-  // Deterministic pseudo-QR pattern based on payload.
   const cells = useMemo(() => {
     const arr: boolean[] = [];
     let h = 0;
@@ -517,7 +698,7 @@ function PixQR({ seed }: { seed: string }) {
     return arr;
   }, [seed]);
   return (
-    <div className="grid grid-cols-13 gap-[2px]" style={{ gridTemplateColumns: "repeat(13, 1fr)" }}>
+    <div className="grid gap-[2px]" style={{ gridTemplateColumns: "repeat(13, 1fr)" }}>
       {cells.map((on, i) => (
         <span key={i} className={"h-2.5 w-2.5 rounded-[1px] " + (on ? "bg-foreground" : "bg-transparent")} />
       ))}
@@ -525,47 +706,10 @@ function PixQR({ seed }: { seed: string }) {
   );
 }
 
-function UploadReceipt({ value, onChange }: { value?: DocumentRef; onChange: (f: DocumentRef | undefined) => void }) {
-  return (
-    <Dropzone label="Comprovante de pagamento" file={value} onFile={onChange} />
-  );
-}
-
-function StatusBlock({ guarantee }: { guarantee: Guarantee }) {
-  const steps: { id: Guarantee["status"]; label: string }[] = [
-    { id: "aguardando",  label: "Pagamento aguardando confirmação" },
-    { id: "reservada",   label: "Garantia operacional reservada" },
-    { id: "monitorando", label: "Monitoramento iniciado" },
-  ];
-  const currentIdx = steps.findIndex((s) => s.id === guarantee.status);
-  return (
-    <div className="rounded-xl glass p-4 space-y-2.5">
-      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Status</div>
-      {steps.map((s, i) => {
-        const done = i < currentIdx;
-        const active = i === currentIdx;
-        return (
-          <div key={s.id} className="flex items-center gap-3 text-sm">
-            <div className={
-              "h-5 w-5 rounded-full grid place-items-center text-[10px] " +
-              (done ? "bg-success/30 text-success border border-success/40"
-                : active ? "bg-secondary text-secondary-foreground" : "bg-surface-container border border-border text-muted-foreground")
-            }>
-              {done ? <Check className="h-3 w-3" /> : i + 1}
-            </div>
-            <span className={active ? "text-foreground font-medium" : done ? "text-muted-foreground line-through" : "text-muted-foreground"}>
-              {s.label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /* ----------------------------- Step 5: Activated ----------------------------- */
 
 function Step5Activated({ op, onGo }: { op: Operation; onGo: () => void }) {
+  const meta = OPERATION_STATUS_META[op.status];
   return (
     <div className="card-surface p-8 space-y-6">
       <motion.div initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center space-y-3">
@@ -574,26 +718,28 @@ function Step5Activated({ op, onGo }: { op: Operation; onGo: () => void }) {
         </div>
         <h2 className="text-2xl font-bold">Operação ativada</h2>
         <p className="text-sm text-muted-foreground">
-          ID <span className="font-mono text-foreground">{op.id}</span> · Status:{" "}
-          <span className="chip chip-warning text-[10px] ml-1">Aguardando eventos aduaneiros</span>
+          <span className="font-mono text-foreground">{op.operation_code}</span> · ID{" "}
+          <span className="font-mono text-foreground">{op.id}</span>
         </p>
+        <StatusBadge label={meta.label} tone={meta.tone} />
       </motion.div>
 
       <div className="grid sm:grid-cols-3 gap-3">
-        <Summary label="Incoterm" value={op.commercial.incoterm || "—"} />
-        <Summary label="Valor" value={`${op.commercial.moeda} ${op.commercial.valor || "0,00"}`} highlight />
-        <Summary label="DUIMP" value={op.documents.duimp || "—"} mono />
+        <Summary label="Incoterm" value={op.incoterm} />
+        <Summary label="Valor" value={formatCurrency(op.operation_value, op.currency)} highlight />
+        <Summary label="DUIMP" value={op.duimp || "—"} mono />
       </div>
 
       <div>
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Timeline operacional</div>
         <ol className="relative border-l border-border ml-3 space-y-4">
-          {op.timeline.map((e) => (
+          {op.events.map((e) => (
             <li key={e.id} className="pl-5 relative">
               <span className="absolute -left-[6px] top-1.5 h-3 w-3 rounded-full bg-secondary shadow-[0_0_10px_oklch(0.85_0.18_200/0.7)]" />
-              <div className="text-sm font-medium">{e.label}</div>
-              {e.description && <div className="text-xs text-muted-foreground">{e.description}</div>}
-              <div className="text-[10px] font-mono text-muted-foreground mt-0.5">{new Date(e.at).toLocaleString("pt-BR")}</div>
+              <div className="text-sm font-medium">{e.description}</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                {new Date(e.timestamp).toLocaleString("pt-BR")} · {e.source}
+              </div>
             </li>
           ))}
         </ol>
@@ -608,20 +754,20 @@ function Step5Activated({ op, onGo }: { op: Operation; onGo: () => void }) {
 
 /* ----------------------------- Side panel ----------------------------- */
 
-function SidePanel({ step, commercial }: { step: StepIndex; commercial: CommercialData }) {
+function SidePanel({
+  step, breakdown, currency, tier,
+}: {
+  step: StepIndex;
+  breakdown: ReturnType<typeof useFeeBreakdown>;
+  currency: Currency;
+  tier: import("@/domain/user").UserTier;
+}) {
   const titles = [
-    "Termos comerciais",
+    "Estrutura financeira",
     "Documentação Siscomex",
     "Liquidação internacional",
     "Custódia digital",
     "Operação em monitoramento",
-  ] as const;
-  const tips = [
-    "Os termos definem como a garantia e a liquidação serão acionadas pelos eventos aduaneiros.",
-    "Documentos digitalizados aceleram a conciliação automática e reduzem o risco de divergência.",
-    "Os dados bancários serão utilizados para futura liquidação automática da operação.",
-    "A garantia operacional fica vinculada à operação até a confirmação do evento aduaneiro selecionado.",
-    "O monitoramento foi iniciado. Você pode acompanhar tudo no painel da operação.",
   ] as const;
 
   return (
@@ -630,12 +776,24 @@ function SidePanel({ step, commercial }: { step: StepIndex; commercial: Commerci
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-secondary" /> {titles[step]}
         </h3>
-        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{tips[step]}</p>
+        <p className="text-[11px] font-mono uppercase tracking-widest text-muted-foreground mt-1">
+          Tier {USER_TIER_LABELS[tier]} · {(breakdown.effective_rate * 100).toFixed(2)}% efetivo
+        </p>
+
         <div className="mt-4 space-y-2 text-sm p-3 rounded-xl glass">
-          <Row label="Operação" value={commercial.incoterm || "—"} />
-          <Row label="Moeda" value={commercial.moeda} />
-          <Row label="Valor" value={commercial.valor || "—"} valueClass="text-secondary font-semibold" />
-          <Row label="Liberação" value={RELEASE_STAGES.find((s) => s.value === commercial.releaseStage)?.label || "—"} />
+          <BreakdownRow label="Valor protegido" value={formatCurrency(breakdown.gross_amount, currency)} />
+          <BreakdownRow label="Fee operacional" value={formatCurrency(breakdown.fee_amount, currency)} />
+          <BreakdownRow label="Taxa de custódia" value={formatCurrency(breakdown.custody_fee, currency)} />
+          <BreakdownRow label="Taxa de liquidação" value={formatCurrency(breakdown.settlement_fee, currency)} />
+          <div className="h-px bg-border my-1" />
+          <BreakdownRow
+            label="Total da garantia"
+            value={formatCurrency(breakdown.total_funding, currency)}
+            highlight
+          />
+          <div className="text-[10px] font-mono text-muted-foreground pt-1">
+            Líquido ao exportador: {formatCurrency(breakdown.net_exporter_amount, currency)}
+          </div>
         </div>
       </div>
 
@@ -647,6 +805,7 @@ function SidePanel({ step, commercial }: { step: StepIndex; commercial: Commerci
           <IntegrationRow label="Siscomex API" status="standby" />
           <IntegrationRow label="Stellar Anchor" status="standby" />
           <IntegrationRow label="Smart Contract Settlement" status="standby" />
+          <IntegrationRow label="Supabase Cloud" status="standby" />
         </div>
       </div>
 
@@ -654,6 +813,15 @@ function SidePanel({ step, commercial }: { step: StepIndex; commercial: Commerci
         <Lock className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>Ambiente demonstrativo. Nenhum pagamento real é processado nesta etapa.</span>
       </div>
+    </div>
+  );
+}
+
+function BreakdownRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex justify-between gap-3 text-xs">
+      <span className={highlight ? "text-foreground font-semibold" : "text-muted-foreground"}>{label}</span>
+      <span className={"font-mono " + (highlight ? "text-secondary font-bold text-sm" : "text-foreground")}>{value}</span>
     </div>
   );
 }
@@ -669,13 +837,48 @@ function IntegrationRow({ label, status }: { label: string; status: "standby" | 
   );
 }
 
+function TierSelector({ value, onChange }: { value: import("@/domain/user").UserTier; onChange: (t: import("@/domain/user").UserTier) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as import("@/domain/user").UserTier)}
+      className="bg-surface-container-low border border-border rounded-lg px-3 py-2 text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground"
+      title="Demo: simular tier do usuário"
+    >
+      {(["STANDARD","ENTERPRISE","VIP","ANCHOR_PARTNER"] as const).map((t) => (
+        <option key={t} value={t}>Tier · {USER_TIER_LABELS[t]}</option>
+      ))}
+    </select>
+  );
+}
+
 /* ----------------------------- Primitives ----------------------------- */
 
-function Field({ label, className = "", children }: { label: string; className?: string; children: React.ReactNode }) {
+function StatusBadge({ label, tone }: { label: string; tone: "muted" | "warning" | "info" | "success" | "primary" }) {
+  const map: Record<typeof tone, string> = {
+    muted:   "chip-info",
+    info:    "chip-info",
+    warning: "chip-warning",
+    success: "chip-success",
+    primary: "chip-cargo",
+  };
+  return <span className={"chip " + map[tone] + " text-[10px] ml-1"}>{label}</span>;
+}
+
+function Field({ label, className = "", error, children }: { label: string; className?: string; error?: string; children: React.ReactNode }) {
   return (
     <div className={className}>
       <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">{label}</div>
       {children}
+      {error && <ErrorMsg msg={error} />}
+    </div>
+  );
+}
+
+function ErrorMsg({ msg }: { msg: string }) {
+  return (
+    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-destructive">
+      <AlertCircle className="h-3 w-3" /> {msg}
     </div>
   );
 }
@@ -720,15 +923,6 @@ function Callout({ icon: Icon, children }: { icon: typeof Activity; children: Re
   );
 }
 
-function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
-  return (
-    <div className="flex justify-between gap-3 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={"truncate " + valueClass}>{value}</span>
-    </div>
-  );
-}
-
 function KV({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
   return (
     <div>
@@ -752,6 +946,3 @@ function Summary({ label, value, highlight, mono }: { label: string; value: stri
     </div>
   );
 }
-
-// Keep imports tree-shake-aware: AlertCircle is exported for future validation banners.
-export { AlertCircle };
