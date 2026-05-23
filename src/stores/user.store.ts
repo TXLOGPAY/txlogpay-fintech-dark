@@ -1,18 +1,17 @@
 import { create } from "zustand";
-import type { User } from "@/types";
-import type { UserTier } from "@/domain/user";
+import type { Profile, UserTier } from "@/types/profile.types";
 
 interface UserState {
-  user: User | null;
+  profile: Profile | null;
   tier: UserTier;
-  setUser: (user: User | null) => void;
+  setProfile: (profile: Profile | null) => void;
   setTier: (tier: UserTier) => void;
 }
 
-// Default tier for the demo. In production this comes from Supabase.
 export const useUserStore = create<UserState>((set) => ({
-  user: null,
+  profile: null,
   tier: "STANDARD",
-  setUser: (user) => set({ user, tier: user?.user_tier ?? "STANDARD" }),
+  setProfile: (profile) =>
+    set({ profile, tier: profile?.tier ?? "STANDARD" }),
   setTier: (tier) => set({ tier }),
 }));
