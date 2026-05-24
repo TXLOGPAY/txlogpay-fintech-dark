@@ -126,7 +126,7 @@ function OperacaoDetail() {
       </motion.div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-        <Info label="Valor protegido" value={formatCurrency(getProtectedAmount(op), op.currency)} />
+        <Info label="Garantia protegida" value={formatCurrency(getProtectedAmount(op), op.currency)} />
         <Info label="Taxa TXLOGPAY" value={formatCurrency(Number(op.fee_amount), op.currency)} />
         <Info label="Total pago" value={formatCurrency(Number(op.total_amount), op.currency)} highlight />
         <Info label="Incoterm" value={op.incoterm || "—"} />

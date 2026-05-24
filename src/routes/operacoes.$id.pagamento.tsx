@@ -112,7 +112,7 @@ function AwaitPayment() {
               <ShieldCheck className="h-4 w-4 text-secondary" /> Resumo Financeiro
             </h2>
             <div className="space-y-3 p-4 rounded-xl glass">
-              <Row label="Valor protegido" value={formatCurrency(Number(op.protected_amount), op.currency)} />
+              <Row label="Garantia protegida" value={formatCurrency(Number(op.protected_amount), op.currency)} />
               <Row label="Taxa TXLOGPAY" value={formatCurrency(Number(op.fee_amount), op.currency)} />
               <div className="h-px bg-border my-1" />
               <Row label="Total a pagar" value={formatCurrency(Number(op.total_amount), op.currency)} highlight />
