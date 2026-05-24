@@ -226,8 +226,8 @@ function PlanCard({ tier }: { tier: UserTier }) {
       </p>
       <div className="mt-5 space-y-2 text-xs">
         <PlanRow label="Garantia operacional" ok />
-        <PlanRow label="Liberação por evento aduaneiro" ok />
-        <PlanRow label="API Stellar / Smart Contract" ok={tier !== "STANDARD"} />
+        <PlanRow label="Liberação programada por evento" ok />
+        <PlanRow label="Monitoramento operacional avançado" ok={tier !== "STANDARD"} />
         <PlanRow label="SLA dedicado" ok={tier === "VIP" || tier === "ANCHOR_PARTNER"} />
       </div>
       {isStandard && (
