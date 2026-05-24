@@ -5,11 +5,12 @@ import { motion } from "motion/react";
 import {
   CheckCircle2, Shield, Zap, FileText, Clock, Loader2,
   Upload, FileCheck2, X, ExternalLink, Sparkles, AlertTriangle,
-  PackageCheck, Banknote, Activity, Truck, Landmark, Globe, ArrowRight,
+  PackageCheck, Banknote, Activity, Truck, Landmark, Globe, ArrowRight, Radio,
 } from "lucide-react";
 import {
-  useOperation, useSubmitReceipt, useValidatePayment,
+  useOperation, useSubmitReceipt, useValidatePayment, useSettlement,
 } from "@/hooks/use-operations";
+import type { Settlement } from "@/services/settlements.db";
 import { operationsDb, type DBOperation } from "@/services/operations.db";
 import { useAuth } from "@/hooks/use-auth";
 import { formatCurrency } from "@/lib/formatters";
@@ -27,6 +28,7 @@ function OperacaoDetail() {
   const { id } = Route.useParams();
   const { user } = useAuth();
   const { data: op, isLoading, error } = useOperation(id);
+  const { data: settlement } = useSettlement(id);
   const submitReceipt = useSubmitReceipt();
   const validate = useValidatePayment();
 
@@ -158,6 +160,9 @@ function OperacaoDetail() {
       {/* ---------- FX reference (USD conversion) ---------- */}
       <FxReferenceCard op={op} />
 
+      {/* ---------- Liquidação Internacional ---------- */}
+      {settlement && <SettlementCard settlement={settlement} />}
+
       {/* ---------- Operational workspace: timeline (left) + upload (right) ---------- */}
       <div className={(showPaymentActions ? "grid lg:grid-cols-2" : "grid grid-cols-1") + " gap-5 mt-5 items-start"}>
         {/* LEFT — Timeline */}
@@ -165,7 +170,7 @@ function OperacaoDetail() {
           <h3 className="text-base font-semibold mb-5 flex items-center gap-2">
             <Zap className="h-4 w-4 text-secondary" /> Timeline operacional
           </h3>
-          <OperationTimeline op={op} />
+          <OperationTimeline op={op} settlement={settlement ?? null} />
         </div>
 
         {/* RIGHT — receipt + hackathon validation */}
@@ -377,7 +382,7 @@ type TimelineStage = {
   at?: string | null;
 };
 
-function OperationTimeline({ op }: { op: { status: string; created_at: string; updated_at: string; activated_at: string | null; payment_submitted_at: string | null } }) {
+function OperationTimeline({ op, settlement }: { op: { status: string; created_at: string; updated_at: string; activated_at: string | null; payment_submitted_at: string | null }; settlement: Settlement | null }) {
   const status = op.status;
   const order = [
     "PENDING_PAYMENT", "PAYMENT_UNDER_REVIEW",
@@ -386,16 +391,19 @@ function OperationTimeline({ op }: { op: { status: string; created_at: string; u
   ];
   const idx = order.indexOf(status);
   const reached = (minIdx: number) => idx >= minIdx;
+  const settledAt = settlement?.created_at ?? null;
+  const settledOk = !!settlement?.successful;
 
   const stages: TimelineStage[] = [
     { key: "registered", title: "Operação registrada", desc: "Processo operacional criado e vinculado ao Siscomex.", icon: FileText, at: op.created_at },
     { key: "pending", title: "Garantia aguardando depósito", desc: "Aguardando pagamento via PIX, TED ou SWIFT.", icon: Banknote, at: reached(0) ? op.created_at : null },
     { key: "received", title: "Comprovante recebido", desc: "Comprovante enviado pelo importador.", icon: FileCheck2, at: op.payment_submitted_at },
     { key: "validated", title: "Garantia validada", desc: "Compliance confirmou os fundos em custódia.", icon: Shield, at: op.activated_at },
-    { key: "monitoring", title: "Monitoramento operacional", desc: "Operação em acompanhamento até o evento de liberação.", icon: Activity, at: reached(2) ? op.activated_at : null },
-    { key: "scheduled", title: "Liquidação programada", desc: "Trigger de liberação confirmado — pagamento em fila.", icon: Truck, at: status === "PAYMENT_RELEASED" || status === "COMPLETED" ? op.updated_at : null },
-    { key: "released", title: "Pagamento liberado", desc: "Recursos liberados ao exportador no exterior.", icon: Landmark, at: status === "PAYMENT_RELEASED" || status === "COMPLETED" ? op.updated_at : null },
-    { key: "completed", title: "Operação concluída", desc: "Ciclo financeiro encerrado com sucesso.", icon: PackageCheck, at: status === "COMPLETED" ? op.updated_at : null },
+    { key: "settlement_started", title: "Settlement iniciado", desc: "Liquidação internacional disparada pelo motor de pagamentos.", icon: Radio, at: settledAt ?? (op.activated_at ? op.activated_at : null) },
+    { key: "settlement_confirmed", title: "Liquidação confirmada", desc: "Rede internacional confirmou a liquidação dos fundos.", icon: Landmark, at: settledOk ? settledAt : null },
+    { key: "ledger_confirmed", title: "Ledger confirmado", desc: "Registro imutável da liquidação no ledger de referência.", icon: Activity, at: settlement?.ledger ? settledAt : null },
+    { key: "monitoring", title: "Monitoramento operacional", desc: "Operação em acompanhamento até o evento de liberação.", icon: Truck, at: reached(2) ? op.activated_at : null },
+    { key: "settled", title: "Operação liquidada", desc: "Ciclo financeiro encerrado com sucesso.", icon: PackageCheck, at: status === "COMPLETED" ? op.updated_at : null },
   ];
 
   // Determine which stage is "active" (the current one in progress).
@@ -442,5 +450,76 @@ function OperationTimeline({ op }: { op: { status: string; created_at: string; u
         );
       })}
     </ol>
+  );
+}
+
+/* ----------------------------- Settlement Card ----------------------------- */
+
+function SettlementCard({ settlement }: { settlement: Settlement }) {
+  const explorer = `https://stellar.expert/explorer/testnet/tx/${settlement.tx_hash}`;
+  const shortHash = settlement.tx_hash.slice(0, 10) + "…" + settlement.tx_hash.slice(-8);
+  const ok = settlement.successful;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      className="card-surface p-6 mt-5 ring-1 ring-secondary/30 shadow-[0_0_28px_-14px_oklch(0.66_0.11_235/0.55)]"
+    >
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl grid place-items-center bg-secondary/10 ring-1 ring-secondary/30">
+            <Radio className="h-5 w-5 text-secondary" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold">Liquidação Internacional</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5 font-mono uppercase tracking-widest">
+              Settlement enterprise · Rede global
+            </p>
+          </div>
+        </div>
+        <span
+          className={
+            "chip text-[10px] font-mono uppercase tracking-widest " +
+            (ok ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive")
+          }
+        >
+          <span className="pulse-dot before:inline-block before:mr-1.5" />
+          {ok ? "Confirmado" : "Falhou"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+        <SettlementField label="Transaction hash" value={shortHash} mono />
+        <SettlementField label="Ledger" value={settlement.ledger != null ? `#${settlement.ledger}` : "—"} mono />
+        <SettlementField label="Asset" value={settlement.asset} />
+        <SettlementField label="Status" value={settlement.status} highlight={ok} />
+      </div>
+
+      <div className="mt-5 flex items-center justify-between gap-3 flex-wrap pt-4 border-t border-border/60">
+        <div className="text-[11px] font-mono text-muted-foreground">
+          Liquidado em {new Date(settlement.created_at).toLocaleString("pt-BR")}
+        </div>
+        <a
+          href={explorer}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-primary inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Ver transação
+        </a>
+      </div>
+    </motion.div>
+  );
+}
+
+function SettlementField({ label, value, mono, highlight }: { label: string; value: string; mono?: boolean; highlight?: boolean }) {
+  return (
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className={"mt-1 text-sm " + (mono ? "font-mono " : "") + (highlight ? "text-success font-semibold" : "font-medium")}>
+        {value}
+      </div>
+    </div>
   );
 }

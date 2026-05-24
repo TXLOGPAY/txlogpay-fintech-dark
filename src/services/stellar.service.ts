@@ -33,7 +33,7 @@ export async function sendTestPayment(destination: string, amount = "10") {
   const fee = await server.fetchBaseFee();
 
   const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
-    fee,
+    fee: String(fee),
     networkPassphrase: StellarSdk.Networks.TESTNET,
   })
     .addOperation(

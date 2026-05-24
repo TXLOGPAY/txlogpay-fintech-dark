@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { operationsDb, type DBOperation } from "@/services/operations.db";
+import { settlementsDb, type Settlement } from "@/services/settlements.db";
 import { useAuth } from "@/hooks/use-auth";
 
 const KEYS = {
@@ -51,12 +52,34 @@ export function useSubmitReceipt() {
 
 export function useValidatePayment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
-    mutationFn: (id: string) => operationsDb.validatePayment(id),
+    mutationFn: async (id: string) => {
+      const op = await operationsDb.validatePayment(id);
+      // Dispara liquidação internacional (Stellar testnet) em background — UX invisível.
+      if (user?.id) {
+        try {
+          await settlementsDb.createForOperation(id, user.id);
+        } catch (e) {
+          console.error("[settlement] falhou:", e);
+        }
+      }
+      return op;
+    },
     onSuccess: (op) => {
       qc.invalidateQueries({ queryKey: ["operations"] });
+      qc.invalidateQueries({ queryKey: ["settlement", op.id] });
       qc.setQueryData(KEYS.detail(op.id), op);
     },
+  });
+}
+
+export function useSettlement(operationId: string | undefined) {
+  return useQuery<Settlement | null>({
+    queryKey: ["settlement", operationId ?? ""],
+    queryFn: () => (operationId ? settlementsDb.getByOperation(operationId) : Promise.resolve(null)),
+    enabled: !!operationId,
+    refetchInterval: (q) => (q.state.data ? false : 4000),
   });
 }
 

@@ -164,6 +164,59 @@ export type Database = {
         }
         Relationships: []
       }
+      settlements: {
+        Row: {
+          amount: number
+          asset: string
+          created_at: string
+          destination_wallet: string
+          id: string
+          ledger: number | null
+          network: string
+          operation_id: string
+          status: string
+          successful: boolean
+          tx_hash: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          asset?: string
+          created_at?: string
+          destination_wallet: string
+          id?: string
+          ledger?: number | null
+          network?: string
+          operation_id: string
+          status?: string
+          successful?: boolean
+          tx_hash: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          created_at?: string
+          destination_wallet?: string
+          id?: string
+          ledger?: number | null
+          network?: string
+          operation_id?: string
+          status?: string
+          successful?: boolean
+          tx_hash?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlements_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
