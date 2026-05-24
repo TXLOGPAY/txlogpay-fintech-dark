@@ -26,12 +26,14 @@ export type Database = {
           duimp: string | null
           exporter_name: string | null
           fee_amount: number
+          fx_reference_date: string | null
           iban: string | null
           id: string
           importer_name: string | null
           incoterm: string | null
           invoice_number: string | null
           operation_code: string
+          operation_currency: string | null
           payment_proof_url: string | null
           payment_receipt_name: string | null
           payment_receipt_url: string | null
@@ -43,6 +45,8 @@ export type Database = {
           swift: string | null
           total_amount: number
           updated_at: string
+          usd_conversion_rate: number | null
+          usd_normalized_value: number | null
           user_id: string
         }
         Insert: {
@@ -56,12 +60,14 @@ export type Database = {
           duimp?: string | null
           exporter_name?: string | null
           fee_amount?: number
+          fx_reference_date?: string | null
           iban?: string | null
           id?: string
           importer_name?: string | null
           incoterm?: string | null
           invoice_number?: string | null
           operation_code: string
+          operation_currency?: string | null
           payment_proof_url?: string | null
           payment_receipt_name?: string | null
           payment_receipt_url?: string | null
@@ -73,6 +79,8 @@ export type Database = {
           swift?: string | null
           total_amount?: number
           updated_at?: string
+          usd_conversion_rate?: number | null
+          usd_normalized_value?: number | null
           user_id: string
         }
         Update: {
@@ -86,12 +94,14 @@ export type Database = {
           duimp?: string | null
           exporter_name?: string | null
           fee_amount?: number
+          fx_reference_date?: string | null
           iban?: string | null
           id?: string
           importer_name?: string | null
           incoterm?: string | null
           invoice_number?: string | null
           operation_code?: string
+          operation_currency?: string | null
           payment_proof_url?: string | null
           payment_receipt_name?: string | null
           payment_receipt_url?: string | null
@@ -103,6 +113,8 @@ export type Database = {
           swift?: string | null
           total_amount?: number
           updated_at?: string
+          usd_conversion_rate?: number | null
+          usd_normalized_value?: number | null
           user_id?: string
         }
         Relationships: []
