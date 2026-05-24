@@ -2,195 +2,248 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { motion } from "motion/react";
 import {
-  Shield, CheckCircle2, TrendingUp, BarChart3, Anchor, Plane, Ship, Zap, Filter, Download, ChevronLeft, ChevronRight, Wallet,
+  Shield, CheckCircle2, TrendingUp, Wallet, Inbox, Loader2, Clock, Sparkles, ArrowUpRight,
 } from "lucide-react";
-import { ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, Tooltip } from "recharts";
+import { useAllOperations } from "@/hooks/use-operations";
+import { useAuth } from "@/hooks/use-auth";
+import { formatCurrency } from "@/lib/formatters";
+import { TIER_FEES } from "@/services/fee-engine.service";
+import { USER_TIER_BADGE } from "@/types/profile.types";
+import type { DBOperation } from "@/services/operations.db";
+import type { UserTier } from "@/domain/user";
 
 export const Route = createFileRoute("/pagamentos")({
   head: () => ({ meta: [{ title: "Pagamentos — TXLOGPAY" }] }),
   component: Pagamentos,
 });
 
-const KPIS = [
-  { label: "Garantias Ativas", value: "USD 4.8M", chip: "+12% vs. mês anterior", chipClass: "chip-success", icon: Shield },
-  { label: "Pagamentos Liberados", value: "USD 12.4M", chip: "+5.2% fluxo acelerado", chipClass: "chip-success", icon: CheckCircle2 },
-  { label: "Economia Total", value: "USD 482K", chip: "TX Efficiency", chipClass: "chip-cargo", icon: TrendingUp },
-  { label: "Operações", value: "128", chip: "Monitoramento real-time", chipClass: "chip-info", icon: BarChart3 },
-];
+// Estimativa institucional: carta de crédito tradicional ~ 2.5% sobre valor
+const TRADITIONAL_LC_RATE = 0.025;
 
-const ROWS = [
-  { id: "TX-8829", route: "HKG > SSZ", icon: Anchor, value: "USD 142.500", fee: "USD 1.140", saving: "USD 2.420", status: "Evento Confirmado", statusClass: "chip-success" },
-  { id: "TX-9104", route: "RTM > VIX", icon: Ship, value: "USD 84.200", fee: "USD 674", saving: "USD 1.280", status: "Garantia Ativa", statusClass: "chip-info" },
-  { id: "TX-8744", route: "SHA > MAO", icon: Plane, value: "USD 215.000", fee: "USD 1.720", saving: "USD 3.150", status: "Pagamento Liberado", statusClass: "chip-success" },
-];
+function computeFinancials(ops: DBOperation[]) {
+  const pending = ops.filter((o) => o.status === "PENDING_PAYMENT");
+  const active = ops.filter((o) => o.status === "ACTIVE");
+  const completed = ops.filter((o) => o.status === "COMPLETED");
 
-const SPARK = [40, 60, 35, 80, 55, 92, 100].map((v, i) => ({ i, v }));
+  const protectedActive = active.reduce((s, o) => s + Number(o.protected_amount || 0), 0);
+  const released = completed.reduce((s, o) => s + Number(o.protected_amount || 0), 0);
+  const totalFees = ops.reduce((s, o) => s + Number(o.fee_amount || 0), 0);
+  const traditionalCost = ops.reduce((s, o) => s + Number(o.protected_amount || 0) * TRADITIONAL_LC_RATE, 0);
+  const savings = Math.max(0, traditionalCost - totalFees);
+
+  return { pending, active, completed, protectedActive, released, totalFees, savings };
+}
+
+function monthlySeries(ops: DBOperation[]) {
+  const buckets = new Map<string, { label: string; count: number; volume: number }>();
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const label = d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+    buckets.set(key, { label, count: 0, volume: 0 });
+  }
+  for (const o of ops) {
+    const d = new Date(o.created_at);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const b = buckets.get(key);
+    if (b) {
+      b.count++;
+      b.volume += Number(o.protected_amount || 0);
+    }
+  }
+  return Array.from(buckets.values());
+}
 
 function Pagamentos() {
+  const { data: ops = [], isLoading, error } = useAllOperations();
+  const { profile } = useAuth();
+  const tier: UserTier = (profile?.tier as UserTier) ?? "STANDARD";
+  const tierMeta = USER_TIER_BADGE[tier];
+  const f = computeFinancials(ops);
+  const series = monthlySeries(ops);
+  const ccy = ops[0]?.currency || "USD";
+
   return (
-    <AppShell topbar={
-      <div className="hidden md:flex gap-6 text-xs font-mono uppercase tracking-widest">
-        <span className="text-muted-foreground">Visão Geral</span>
-        <span className="text-secondary">Relatórios</span>
-      </div>
-    }>
+    <AppShell>
       <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-4">
-        <Link to="/dashboard" className="hover:text-foreground">Dashboard</Link> › <span className="text-secondary">Pagamentos</span>
+        <Link to="/dashboard" className="hover:text-foreground">Dashboard</Link> ›{" "}
+        <span className="text-secondary">Pagamentos</span>
       </div>
+
       <div className="flex flex-wrap justify-between items-start gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Pagamentos Operacionais</h1>
-          <p className="text-sm text-muted-foreground mt-1">Monitoramento financeiro vinculado aos eventos das operações internacionais.</p>
+          <h1 className="text-3xl font-bold">Pagamentos & Garantias</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Visão financeira consolidada das operações monitoradas. Liberação vinculada a eventos aduaneiros.
+          </p>
         </div>
-        <div className="flex gap-3">
-          <button className="rounded-xl px-4 py-2.5 text-sm border border-border hover:bg-surface-container flex items-center gap-2"><Filter className="h-4 w-4" />Filtros Avançados</button>
-          <button className="rounded-xl px-4 py-2.5 text-sm border border-border hover:bg-surface-container flex items-center gap-2"><Download className="h-4 w-4" />Exportar</button>
-        </div>
+        <span className={"chip text-[11px] " + tierMeta.className}>Plano {tierMeta.label}</span>
       </div>
 
-      <div className="grid xl:grid-cols-5 gap-5">
-        <div className="xl:col-span-4 space-y-5">
+      {isLoading ? (
+        <Loading />
+      ) : error ? (
+        <ErrorView msg={(error as Error).message} />
+      ) : ops.length === 0 ? (
+        <Empty />
+      ) : (
+        <>
+          {/* KPIs reais */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-            {KPIS.map((k, i) => (
-              <motion.div key={k.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="card-surface p-5">
-                <div className="flex justify-between items-start text-sm">
-                  <span>{k.label}</span>
-                  <k.icon className="h-4 w-4 text-secondary" />
+            <Kpi icon={Clock}        label="Aguardando depósito" value={String(f.pending.length)} hint={`${f.pending.length} operação(ões) em PENDING_PAYMENT`} tone="chip-warning" />
+            <Kpi icon={Shield}       label="Garantia ativa"      value={formatCurrency(f.protectedActive, ccy)} hint={`${f.active.length} operações ativas`} tone="chip-info" highlight />
+            <Kpi icon={CheckCircle2} label="Pagamentos liberados" value={formatCurrency(f.released, ccy)} hint={`${f.completed.length} concluídas`} tone="chip-success" />
+            <Kpi icon={TrendingUp}   label="Economia gerada"      value={formatCurrency(f.savings, ccy)} hint="vs. carta de crédito tradicional" tone="chip-cargo" />
+          </div>
+
+          <div className="grid xl:grid-cols-3 gap-5 mt-6">
+            {/* Listas operacionais */}
+            <div className="xl:col-span-2 space-y-5">
+              <PaymentBlock title="Aguardando depósito" tone="warning" ops={f.pending} empty="Nenhuma operação aguardando depósito." />
+              <PaymentBlock title="Garantia ativa"      tone="info"    ops={f.active}  empty="Sem garantias ativas no momento." />
+              <PaymentBlock title="Pagamentos liberados" tone="success" ops={f.completed} empty="Nenhuma liquidação concluída ainda." />
+            </div>
+
+            {/* Right column: chart + comparativo + upgrade */}
+            <div className="space-y-5">
+              <div className="card-surface p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Volume mensal</div>
+                  <Wallet className="h-4 w-4 text-secondary" />
                 </div>
-                <div className="text-2xl font-bold mt-3">{k.value}</div>
-                <div className="mt-3"><span className={"chip " + k.chipClass + " text-[9px]"}>{k.chip}</span></div>
-              </motion.div>
-            ))}
-          </div>
-
-          <div className="card-surface p-6">
-            <div className="flex flex-wrap gap-3 items-center">
-              <span className="text-sm">Visualizar por:</span>
-              <span className="chip chip-info">Garantia ativa ✕</span>
-              <button className="chip chip-info opacity-60 hover:opacity-100">Evento confirmado</button>
-              <button className="chip chip-info opacity-60 hover:opacity-100">Pagamento liberado</button>
-            </div>
-          </div>
-
-          <div className="card-surface p-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground border-b border-border">
-                    <th className="py-3 pr-4">Operação</th>
-                    <th className="py-3 pr-4">Valor Original</th>
-                    <th className="py-3 pr-4">Fee TXLOGPAY</th>
-                    <th className="py-3 pr-4">Economia Estimada</th>
-                    <th className="py-3 pr-4">Status Operacional</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ROWS.map(r => (
-                    <tr key={r.id} className="border-b border-border/60">
-                      <td className="py-4 pr-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg grid place-items-center bg-surface-container-low"><r.icon className="h-4 w-4 text-secondary" /></div>
-                          <div>
-                            <Link to="/operacoes/$id" params={{ id: r.id }} className="font-mono font-semibold hover:text-secondary">{r.id}</Link>
-                            <div className="text-[10px] text-muted-foreground font-mono">{r.route}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 pr-4">{r.value}</td>
-                      <td className="py-4 pr-4 font-semibold">{r.fee}</td>
-                      <td className="py-4 pr-4 text-success">{r.saving}</td>
-                      <td className="py-4 pr-4"><span className={"chip " + r.statusClass + " text-[10px]"}>{r.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-between items-center mt-5 text-xs">
-              <span className="text-muted-foreground">Exibindo 12 de 128 operações financeiras monitoradas</span>
-              <div className="flex gap-1">
-                <button className="h-8 w-8 rounded-lg border border-border grid place-items-center"><ChevronLeft className="h-3.5 w-3.5" /></button>
-                <button className="h-8 w-8 rounded-lg btn-primary text-xs">1</button>
-                <button className="h-8 w-8 rounded-lg border border-border text-xs">2</button>
-                <button className="h-8 w-8 rounded-lg border border-border grid place-items-center"><ChevronRight className="h-3.5 w-3.5" /></button>
-              </div>
-            </div>
-          </div>
-
-          <div className="card-surface p-6">
-            <h3 className="text-lg font-semibold">Velocidade de Liquidação</h3>
-            <p className="text-sm text-muted-foreground mt-1">Eficiência institucional comparada na liberação de recursos após a confirmação de eventos logísticos.</p>
-            <div className="grid md:grid-cols-3 gap-6 mt-6 items-center">
-              <div className="md:col-span-2 space-y-4">
-                <div>
-                  <div className="flex justify-between text-xs mb-2"><span className="font-mono uppercase tracking-widest text-secondary">TXLOGPAY</span><span className="font-semibold">8 segundos</span></div>
-                  <div className="h-2 rounded-full bg-surface-container-low overflow-hidden"><div className="h-full w-[8%] rounded-full" style={{ background: "var(--gradient-brand)" }} /></div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs mb-2"><span className="font-mono uppercase tracking-widest text-muted-foreground">Tradicional</span><span className="text-muted-foreground">2 - 5 dias úteis</span></div>
-                  <div className="h-2 rounded-full bg-surface-container-low overflow-hidden"><div className="h-full w-[100%] rounded-full bg-muted-foreground/40" /></div>
+                <div className="text-2xl font-bold mt-1 text-gradient">{formatCurrency(f.protectedActive + f.released, ccy)}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">total transacionado</div>
+                <div className="h-28 mt-4">
+                  <ResponsiveContainer>
+                    <BarChart data={series}>
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: "transparent" }} contentStyle={{ background: "var(--surface-container)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => formatCurrency(v, ccy)} />
+                      <Bar dataKey="volume" radius={[4, 4, 0, 0]}>
+                        {series.map((_, i) => (
+                          <Cell key={i} fill={i === series.length - 1 ? "oklch(0.85 0.18 200)" : "oklch(0.85 0.18 200 / 0.4)"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
-              <div className="text-center p-6 rounded-xl glass">
-                <Zap className="h-8 w-8 text-secondary mx-auto" />
-                <div className="text-3xl font-bold text-gradient mt-2">99%</div>
-                <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">mais rápido</div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Right: financial impact */}
-        <div className="space-y-5">
-          <div className="card-surface p-6 relative overflow-hidden" style={{ background: "linear-gradient(160deg, oklch(0.32 0.16 230 / 0.7), oklch(0.22 0.10 270 / 0.6))" }}>
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Impacto Financeiro</div>
-                <div className="font-semibold mt-1">Economia Acumulada</div>
-              </div>
-              <Wallet className="h-4 w-4 text-secondary" />
-            </div>
-            <div className="mt-8 text-4xl font-bold">USD<br />482.000</div>
-            <div className="mt-2 text-xs"><span className="text-success">↑ 14.2%</span> <span className="font-mono uppercase tracking-widest text-muted-foreground ml-2">Crescimento mensal</span></div>
-            <div className="h-20 mt-5">
-              <ResponsiveContainer>
-                <BarChart data={SPARK}>
-                  <Bar dataKey="v" radius={[4, 4, 0, 0]}>
-                    {SPARK.map((_, i) => <Cell key={i} fill={i === SPARK.length - 1 ? "oklch(0.85 0.18 200)" : "oklch(0.85 0.18 200 / 0.4)"} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <button className="mt-5 w-full rounded-xl py-3 text-sm font-semibold border border-secondary/40 hover:bg-secondary/10 inline-flex items-center justify-center gap-2">Gerar DRE Operacional →</button>
-          </div>
-
-          <div className="card-surface p-6">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Custo Médio P/ Operação</div>
-            <div className="mt-4 text-sm">
-              <div>Carta de Crédito</div>
-              <div className="text-xl font-semibold text-muted-foreground">≈ USD 3.560</div>
-              <div className="my-3 h-px bg-border" />
-              <div className="text-secondary text-xs font-mono uppercase tracking-widest">Taxa TXLOGPAY</div>
-              <div className="text-2xl font-bold text-gradient">USD 1.140</div>
+              <PlanComparison currentTier={tier} />
             </div>
           </div>
-
-          <div className="card-surface p-6">
-            <div className="flex justify-between items-center"><div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Atividade Recente</div><a className="text-[10px] text-secondary">Ver Todos</a></div>
-            <div className="mt-4 space-y-4 text-sm">
-              <div>
-                <div className="flex items-start gap-2">
-                  <span className="h-2 w-2 mt-1.5 rounded-full bg-secondary shadow-[0_0_8px_oklch(0.85_0.18_200)]" />
-                  <div><div className="font-semibold">Chegada Confirmada</div><div className="text-xs text-muted-foreground">Operação TX-8829 | Porto de Santos</div><div className="mt-1 inline-block chip chip-success text-[9px]">Gatilho de pagamento ativado</div></div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="h-2 w-2 mt-1.5 rounded-full bg-accent" />
-                <div><div className="font-semibold">Manifesto Liberado</div><div className="text-xs text-muted-foreground">Operação TX-9104 | Alfândega VIX</div></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </AppShell>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, hint, tone, highlight }: { icon: any; label: string; value: string; hint: string; tone: string; highlight?: boolean }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      className={"card-surface p-6 " + (highlight ? "ring-1 ring-secondary/40" : "")}>
+      <div className="flex justify-between items-start">
+        <Icon className="h-5 w-5 text-secondary" />
+        <span className={"chip " + tone + " text-[10px]"}>{hint.split(" ").slice(0,2).join(" ")}</span>
+      </div>
+      <div className="mt-6 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="mt-2 text-3xl font-bold">{value}</div>
+      <div className="mt-2 text-[10px] text-muted-foreground">{hint}</div>
+    </motion.div>
+  );
+}
+
+function PaymentBlock({ title, tone, ops, empty }: { title: string; tone: "warning" | "info" | "success"; ops: DBOperation[]; empty: string }) {
+  const dot = tone === "warning" ? "var(--warning)" : tone === "success" ? "var(--success)" : "var(--secondary)";
+  return (
+    <div className="card-surface p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full" style={{ background: dot, boxShadow: `0 0 10px ${dot}` }} />
+          {title}
+        </h2>
+        <span className="font-mono text-[10px] text-muted-foreground">{ops.length}</span>
+      </div>
+      {ops.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-4 text-center">{empty}</p>
+      ) : (
+        <div className="space-y-2">
+          {ops.slice(0, 5).map((o) => (
+            <Link key={o.id} to="/operacoes/$id" params={{ id: o.id }}
+              className="flex items-center justify-between p-3 rounded-lg glass hover:bg-surface-container transition-colors">
+              <div>
+                <div className="font-mono text-secondary text-sm font-semibold">#{o.operation_code}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">{o.exporter_name || "—"} · {o.beneficiary_country || "—"}</div>
+              </div>
+              <div className="text-right">
+                <div className="font-semibold text-sm">{formatCurrency(Number(o.protected_amount), o.currency)}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">fee {formatCurrency(Number(o.fee_amount), o.currency)}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanComparison({ currentTier }: { currentTier: UserTier }) {
+  const tiers: UserTier[] = ["STANDARD", "ENTERPRISE", "VIP"];
+  return (
+    <div className="card-surface p-6 relative overflow-hidden" style={{ background: "linear-gradient(160deg, oklch(0.32 0.16 230 / 0.6), oklch(0.22 0.10 270 / 0.55))" }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Comparação de Planos</div>
+        <Sparkles className="h-4 w-4 text-accent" />
+      </div>
+      <h3 className="text-lg font-semibold">Reduza sua taxa operacional</h3>
+      <div className="mt-4 space-y-2">
+        {tiers.map((t) => {
+          const f = TIER_FEES[t];
+          const total = (f.operational + f.custody + f.settlement) * 100;
+          const active = t === currentTier;
+          return (
+            <div key={t} className={"flex items-center justify-between p-3 rounded-lg " + (active ? "bg-secondary/15 ring-1 ring-secondary/40" : "bg-surface-container-low")}>
+              <div>
+                <div className="text-sm font-semibold">{USER_TIER_BADGE[t].label}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">operacional + custódia + liquidação</div>
+              </div>
+              <div className="text-right">
+                <div className={"font-mono text-sm font-bold " + (active ? "text-secondary" : "")}>{total.toFixed(2)}%</div>
+                {active && <div className="text-[9px] text-secondary font-mono uppercase">atual</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {currentTier !== "ENTERPRISE" && currentTier !== "VIP" && (
+        <Link to="/configuracoes" className="mt-5 w-full rounded-xl py-3 text-sm font-semibold border border-secondary/40 hover:bg-secondary/10 inline-flex items-center justify-center gap-2">
+          Upgrade Enterprise <ArrowUpRight className="h-4 w-4" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function Loading() {
+  return <div className="card-surface p-16 grid place-items-center"><Loader2 className="h-6 w-6 text-secondary animate-spin" /></div>;
+}
+function ErrorView({ msg }: { msg: string }) {
+  return <div className="card-surface p-8 text-center text-sm text-destructive">{msg}</div>;
+}
+function Empty() {
+  return (
+    <div className="card-surface p-12 text-center">
+      <div className="mx-auto h-14 w-14 rounded-2xl grid place-items-center bg-surface-container-low border border-border mb-4">
+        <Inbox className="h-6 w-6 text-muted-foreground" />
+      </div>
+      <h3 className="text-base font-semibold">Sem movimentações financeiras</h3>
+      <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+        Quando você criar sua primeira operação, todas as garantias, fees e liberações aparecerão aqui em tempo real.
+      </p>
+      <Link to="/operacoes/conectar" className="btn-primary inline-flex items-center gap-2 mt-5 rounded-xl px-5 py-2.5 text-sm font-semibold">
+        Criar primeira operação
+      </Link>
+    </div>
   );
 }
