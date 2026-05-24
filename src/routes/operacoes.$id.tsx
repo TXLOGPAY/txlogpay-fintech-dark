@@ -5,11 +5,12 @@ import { motion } from "motion/react";
 import {
   CheckCircle2, Shield, Zap, FileText, Clock, Loader2,
   Upload, FileCheck2, X, ExternalLink, Sparkles, AlertTriangle,
-  PackageCheck, Banknote, Activity, Truck, Landmark, Globe, ArrowRight,
+  PackageCheck, Banknote, Activity, Truck, Landmark, Globe, ArrowRight, Radio,
 } from "lucide-react";
 import {
-  useOperation, useSubmitReceipt, useValidatePayment,
+  useOperation, useSubmitReceipt, useValidatePayment, useSettlement,
 } from "@/hooks/use-operations";
+import type { Settlement } from "@/services/settlements.db";
 import { operationsDb, type DBOperation } from "@/services/operations.db";
 import { useAuth } from "@/hooks/use-auth";
 import { formatCurrency } from "@/lib/formatters";
