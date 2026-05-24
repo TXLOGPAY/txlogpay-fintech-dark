@@ -156,7 +156,7 @@ function Kpi({ icon: Icon, label, value, hint, tone, highlight }: { icon: any; l
   );
 }
 
-function PaymentBlock({ title, tone, ops, empty }: { title: string; tone: "warning" | "info" | "success"; ops: DBOperation[]; empty: string }) {
+function PaymentBlock({ title, tone, ops, empty, showReceipt }: { title: string; tone: "warning" | "info" | "success"; ops: DBOperation[]; empty: string; showReceipt?: boolean }) {
   const dot = tone === "warning" ? "var(--warning)" : tone === "success" ? "var(--success)" : "var(--secondary)";
   return (
     <div className="card-surface p-6">
@@ -172,13 +172,20 @@ function PaymentBlock({ title, tone, ops, empty }: { title: string; tone: "warni
       ) : (
         <div className="space-y-2">
           {ops.slice(0, 5).map((o) => (
-            <Link key={o.id} to="/operacoes/$id" params={{ id: o.id }}
+            <Link key={o.id} to="/operacoes/$id/pagamento" params={{ id: o.id }}
               className="flex items-center justify-between p-3 rounded-lg glass hover:bg-surface-container transition-colors">
-              <div>
+              <div className="min-w-0">
                 <div className="font-mono text-secondary text-sm font-semibold">#{o.operation_code}</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">{o.exporter_name || "—"} · {o.beneficiary_country || "—"}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                  {o.exporter_name || "—"} · {o.beneficiary_country || "—"}
+                </div>
+                {showReceipt && o.payment_receipt_name && (
+                  <div className="text-[10px] text-secondary font-mono mt-1 truncate">
+                    📎 {o.payment_receipt_name} · {o.payment_submitted_at ? new Date(o.payment_submitted_at).toLocaleDateString("pt-BR") : ""}
+                  </div>
+                )}
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0 ml-3">
                 <div className="font-semibold text-sm">{formatCurrency(Number(o.protected_amount), o.currency)}</div>
                 <div className="text-[10px] text-muted-foreground font-mono">fee {formatCurrency(Number(o.fee_amount), o.currency)}</div>
               </div>
@@ -189,6 +196,7 @@ function PaymentBlock({ title, tone, ops, empty }: { title: string; tone: "warni
     </div>
   );
 }
+
 
 function PlanComparison({ currentTier }: { currentTier: UserTier }) {
   const tiers: UserTier[] = ["STANDARD", "ENTERPRISE", "VIP"];
