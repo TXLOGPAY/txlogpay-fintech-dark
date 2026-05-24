@@ -509,23 +509,37 @@ function Landing() {
               Compare o custo financeiro estimado de LC tradicional (2,5%) com a taxa TXLOGPAY Growth (1,25%).
             </p>
 
-            <label className="block mt-8 text-sm font-mono uppercase tracking-widest text-muted-foreground">
+            <label htmlFor="volume-input" className="block mt-8 text-sm font-mono uppercase tracking-widest text-muted-foreground">
               Volume mensal (USD)
             </label>
-            <Input
-              type="number"
-              min={100000}
-              step={100000}
-              value={volume}
-              onChange={(e) => setVolume(Math.max(0, Number(e.target.value) || 0))}
-              className="mt-2 h-12 text-lg font-semibold"
-            />
+            <div className="relative mt-2 group">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm pointer-events-none transition-colors group-focus-within:text-foreground">
+                US$
+              </span>
+              <Input
+                id="volume-input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={volume ? volume.toLocaleString("en-US") : ""}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 12);
+                  setVolume(digits ? Number(digits) : 0);
+                }}
+                placeholder="0"
+                className="h-14 pl-14 pr-4 text-2xl font-semibold tracking-tight tabular-nums transition-all duration-200 focus-visible:ring-2 focus-visible:ring-primary/40"
+              />
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {[500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000].map((v) => (
                 <button
                   key={v}
                   onClick={() => setVolume(v)}
-                  className="text-xs font-mono px-3 py-1.5 rounded-md border border-border hover:bg-surface-container transition"
+                  className={`text-xs font-mono px-3 py-1.5 rounded-md border transition ${
+                    volume === v
+                      ? "border-primary/60 bg-primary/10 text-foreground"
+                      : "border-border hover:bg-surface-container"
+                  }`}
                 >
                   US$ {(v / 1_000_000).toFixed(1)}M
                 </button>
@@ -538,7 +552,7 @@ function Landing() {
               <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
                 Economia mensal estimada
               </div>
-              <div className="mt-2 text-4xl md:text-5xl font-bold text-gradient">
+              <div className="mt-2 text-4xl md:text-5xl font-bold text-gradient tabular-nums transition-all duration-300">
                 US$ {savings.monthly.toLocaleString("en-US", { maximumFractionDigits: 0 })}
               </div>
             </div>
@@ -547,7 +561,7 @@ function Landing() {
                 <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
                   Economia anual
                 </div>
-                <div className="mt-1 text-xl font-semibold">
+                <div className="mt-1 text-xl font-semibold tabular-nums transition-all duration-300">
                   US$ {savings.annual.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                 </div>
               </div>
@@ -560,7 +574,7 @@ function Landing() {
                 </div>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground font-mono">
+            <div className="text-xs text-muted-foreground font-mono tabular-nums">
               Custo LC: US$ {savings.lcCost.toLocaleString("en-US", { maximumFractionDigits: 0 })} ·
               Custo TXLOGPAY: US$ {savings.txCost.toLocaleString("en-US", { maximumFractionDigits: 0 })}
             </div>
