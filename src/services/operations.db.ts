@@ -6,9 +6,12 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { ACTIVE_STATUSES } from "@/domain/operation-status";
 import { getUsdRate } from "@/services/fx.service";
+import { getProtectedAmount } from "@/lib/financial-calculations";
 
 export type DBOperation = Database["public"]["Tables"]["operations"]["Row"] & {
   operation_currency?: string | null;
+  operation_value?: number | null;
+  total_fees?: number | null;
   usd_conversion_rate?: number | null;
   usd_normalized_value?: number | null;
   fx_reference_date?: string | null;
@@ -26,7 +29,7 @@ function makeOperationCode() {
 // Anything not in this list is silently dropped before insert/update.
 const ALLOWED_COLUMNS = [
   "id", "user_id", "operation_code", "status",
-  "protected_amount", "fee_amount", "total_amount", "currency",
+  "operation_value", "total_fees", "protected_amount", "fee_amount", "total_amount", "currency",
   "incoterm", "release_trigger",
   "exporter_name", "importer_name",
   "bank_name", "swift", "iban",
@@ -84,13 +87,19 @@ export const operationsDb = {
   ): Promise<DBOperation> {
     const safe = pickAllowed(input) as Record<string, unknown>;
 
-    // FX normalisation — always store USD-equivalent values for executive aggregation.
+    // Financial base: protected_amount is always operation_value - total_fees.
     const currency = String(safe.currency ?? input.currency ?? "USD").toUpperCase();
-    const protectedAmount = Number(safe.protected_amount ?? input.protected_amount ?? 0);
+    const operationValue = Number(safe.operation_value ?? input.operation_value ?? input.protected_amount ?? 0);
+    const totalFees = Number(safe.total_fees ?? input.total_fees ?? input.fee_amount ?? 0);
+    safe.operation_value = operationValue;
+    safe.total_fees = totalFees;
+    safe.protected_amount = getProtectedAmount({ operation_value: operationValue, total_fees: totalFees });
+
+    // FX reference for operation detail; dashboard still recalculates from live cached USD-base rates.
     const quote = await getUsdRate(currency);
     safe.operation_currency = currency;
     safe.usd_conversion_rate = quote.rate;
-    safe.usd_normalized_value = protectedAmount * quote.rate;
+    safe.usd_normalized_value = Number(safe.protected_amount) * quote.rate;
     safe.fx_reference_date = quote.reference_date;
 
     const payload = {
