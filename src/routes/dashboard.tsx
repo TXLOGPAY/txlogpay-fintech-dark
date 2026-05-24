@@ -196,12 +196,13 @@ function Dashboard() {
   );
 }
 
-function Kpi({ icon: Icon, label, value, chip, chipClass, featured }: { icon: any; label: string; value: string; chip: string; chipClass: string; featured?: boolean }) {
+function Kpi({ icon: Icon, label, value, chip, chipClass, featured, tooltip }: { icon: any; label: string; value: string; chip: string; chipClass: string; featured?: boolean; tooltip?: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       className={"card-surface p-6 " + (featured ? "relative overflow-hidden" : "")}
       style={featured ? { background: "linear-gradient(135deg, oklch(0.26 0.10 265 / 0.9), oklch(0.28 0.16 320 / 0.7))" } : undefined}
+      title={tooltip}
     >
       <div className="flex justify-between items-start">
         <Icon className="h-5 w-5 text-secondary" />
