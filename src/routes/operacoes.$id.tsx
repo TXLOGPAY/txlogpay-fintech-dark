@@ -344,7 +344,50 @@ function KV({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
   );
 }
 
-/* ----------------------------- Timeline ----------------------------- */
+/* ----------------------------- FX Reference ----------------------------- */
+
+function FxReferenceCard({ op }: { op: DBOperation }) {
+  const original = (op.operation_currency || op.currency || "USD").toUpperCase();
+  const rate = op.usd_conversion_rate != null ? Number(op.usd_conversion_rate) : null;
+  const usdValue = op.usd_normalized_value != null ? Number(op.usd_normalized_value) : null;
+  const refDate = op.fx_reference_date || op.created_at;
+  if (original === "USD" && rate == null && usdValue == null) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      className="card-surface p-5 mt-5 flex flex-wrap items-center gap-5 ring-1 ring-secondary/20"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <Globe className="h-4 w-4 text-secondary" />
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Conversão de referência
+        </span>
+      </div>
+      <div className="flex items-center gap-3 text-sm font-mono">
+        <span className="text-foreground">
+          {formatCurrency(Number(op.protected_amount), original)}
+        </span>
+        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-secondary font-bold">
+          {usdValue != null
+            ? formatCurrency(usdValue, "USD")
+            : formatCurrency(Number(op.protected_amount), "USD")}
+        </span>
+      </div>
+      {rate != null && (
+        <div className="text-xs text-muted-foreground font-mono">
+          Taxa: 1 {original} = {rate.toFixed(4)} USD
+        </div>
+      )}
+      <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground ml-auto">
+        Cotação em {new Date(refDate).toLocaleString("pt-BR")}
+      </div>
+    </motion.div>
+  );
+}
+
+
 
 type TimelineStage = {
   key: string;
