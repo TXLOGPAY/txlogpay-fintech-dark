@@ -23,13 +23,11 @@ import { type UploadedFile } from "@/schemas/upload.schema";
 import { formatCurrency, maskCurrencyInput, parseCurrencyInput, maskIBAN, maskSWIFT, maskDUIMP, maskInvoice } from "@/lib/formatters";
 import { COUNTRIES, suggestCities } from "@/lib/countries";
 
-import { operationService } from "@/services/operation.service";
-import { escrowService } from "@/services/escrow.service";
-import { eventEngine } from "@/services/event-engine.service";
+import { operationsDb } from "@/services/operations.db";
 
 import { FileDropzone } from "@/components/FileDropzone";
 
-import type { Operation, Currency, Incoterm, ReleaseTrigger } from "@/types";
+import type { Currency, Incoterm, ReleaseTrigger } from "@/types";
 
 export const Route = createFileRoute("/operacoes/conectar")({
   head: () => ({ meta: [{ title: "Nova Operação — TXLOGPAY" }] }),
