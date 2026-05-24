@@ -10,13 +10,14 @@ const CURRENCY_LOCALE: Record<Currency, string> = {
   GBP: "en-GB",
 };
 
-export function formatCurrency(value: number, currency: Currency): string {
-  if (!Number.isFinite(value)) return `${currency} 0,00`;
-  const formatted = new Intl.NumberFormat(CURRENCY_LOCALE[currency], {
+export function formatCurrency(value: number, currency: Currency | string): string {
+  const cur = (currency as Currency) in CURRENCY_LOCALE ? (currency as Currency) : "USD";
+  if (!Number.isFinite(value)) return `${cur} 0,00`;
+  const formatted = new Intl.NumberFormat(CURRENCY_LOCALE[cur], {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
-  return `${currency} ${formatted}`;
+  return `${cur} ${formatted}`;
 }
 
 // Parse user input (accepts "1.500,00" / "1,500.00" / "1500") into a number.
