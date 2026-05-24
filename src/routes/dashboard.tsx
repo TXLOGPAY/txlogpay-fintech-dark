@@ -64,7 +64,7 @@ function Dashboard() {
 
   const k = computeKpis(ops);
   const series = monthlySeries(k.counted);
-  const ccy = ops[0]?.currency || "USD";
+  const ccy = "USD"; // consolidação executiva sempre em USD (FX normalizado)
   const isNewUser = ops.length === 0;
 
   return (
@@ -171,7 +171,7 @@ function Dashboard() {
               <div className="space-y-4 text-sm">
                 <Row label="Total protegido"    value={formatCurrency(k.protectedAmount, ccy)} highlight />
                 <Row label="Volume transacionado" value={formatCurrency(k.volume, ccy)} />
-                <Row label="Fees pagos"          value={formatCurrency(k.counted.reduce((s, o) => s + Number(o.fee_amount || 0), 0), ccy)} />
+                <Row label="Fees pagos"          value={formatCurrency(k.fees, ccy)} />
                 <Row label="Economia gerada"     value={formatCurrency(k.savings, ccy)} />
                 <div className="h-px bg-border my-2" />
                 <Row label="Ativas"    value={String(k.activeCount)} />
