@@ -32,9 +32,9 @@ function OperacoesList() {
 
   const KPIS = [
     { icon: Truck, label: "Operações Ativas", value: String(k.activeCount), chip: k.activeCount > 0 ? "Em monitoramento" : "Nenhuma", chipClass: "chip-info" },
-    { icon: Shield, label: "Pagamentos Protegidos", value: formatCurrency(k.protectedSum, currency), chip: "Cargo-Linked", chipClass: "chip-cargo", highlight: true },
+    { icon: Shield, label: "Pagamentos Protegidos", value: formatCurrency(k.protectedSum, currency), chip: "Garantia ativa", chipClass: "chip-info", highlight: true },
     { icon: ClipboardCheck, label: "Total de Operações", value: String(k.total), chip: "Histórico", chipClass: "chip-info" },
-    { icon: Building2, label: "Liquidações Concluídas", value: String(k.settledCount), chip: "Finalizadas", chipClass: "chip-info" },
+    { icon: Building2, label: "Operações Concluídas", value: String(k.settledCount), chip: "Finalizadas", chipClass: "chip-success" },
   ];
 
   return (
