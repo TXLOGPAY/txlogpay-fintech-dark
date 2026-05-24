@@ -11,16 +11,11 @@ export const Route = createFileRoute("/operacoes/")({
   component: OperacoesList,
 });
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  PENDING_PAYMENT: { label: "Aguardando depósito", color: "var(--warning)" },
-  ACTIVE:    { label: "Ativa",      color: "var(--secondary)" },
-  COMPLETED: { label: "Concluída",  color: "var(--success)" },
-  CANCELLED: { label: "Cancelada",  color: "var(--destructive)" },
-};
+import { STATUS_META, isActive } from "@/domain/operation-status";
 
 function computeKpis(ops: DBOperation[]) {
-  const active = ops.filter((o) => o.status === "ACTIVE");
-  const settled = ops.filter((o) => o.status === "COMPLETED");
+  const active = ops.filter((o) => isActive(o.status) && o.status !== "COMPLETED" && o.status !== "PAYMENT_RELEASED");
+  const settled = ops.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
   const protectedSum = active.reduce((s, o) => s + Number(o.protected_amount || 0), 0);
   return { activeCount: active.length, settledCount: settled.length, protectedSum, total: ops.length };
 }
@@ -91,7 +86,7 @@ function OperacoesList() {
               </thead>
               <tbody>
                 {ops.map((o) => {
-                  const meta = STATUS_META[o.status] ?? { label: o.status, color: "var(--muted-foreground)" };
+                  const meta = STATUS_META[o.status as keyof typeof STATUS_META] ?? { label: o.status, color: "var(--muted-foreground)" };
                   return (
                     <tr key={o.id} className="border-b border-border/60 hover:bg-surface-container/50">
                       <td className="py-4 pr-4">

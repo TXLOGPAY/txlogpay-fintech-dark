@@ -5,18 +5,12 @@ import { motion } from "motion/react";
 import { CheckCircle2, Shield, Zap, FileText, Clock, Loader2 } from "lucide-react";
 import { useOperation } from "@/hooks/use-operations";
 import { formatCurrency } from "@/lib/formatters";
+import { STATUS_META, isActive, isPending, isUnderReview } from "@/domain/operation-status";
 
 export const Route = createFileRoute("/operacoes/$id")({
   head: ({ params }) => ({ meta: [{ title: `Operação ${params.id} — TXLOGPAY` }] }),
   component: OperacaoDetail,
 });
-
-const STATUS_LABELS: Record<string, { label: string; tone: string }> = {
-  PENDING_PAYMENT: { label: "Aguardando pagamento", tone: "chip-warning" },
-  ACTIVE:          { label: "Ativa · Em monitoramento", tone: "chip-info" },
-  COMPLETED:         { label: "Concluída",       tone: "chip-success" },
-  CANCELLED:       { label: "Cancelada",       tone: "chip-warning" },
-};
 
 function OperacaoDetail() {
   const { id } = Route.useParams();
@@ -24,7 +18,7 @@ function OperacaoDetail() {
   const { data: op, isLoading, error } = useOperation(id);
 
   useEffect(() => {
-    if (op?.status === "PENDING_PAYMENT") {
+    if (op && (isPending(op.status) || isUnderReview(op.status))) {
       navigate({ to: "/operacoes/$id/pagamento", params: { id }, replace: true });
     }
   }, [op?.status, id, navigate]);
@@ -43,7 +37,7 @@ function OperacaoDetail() {
     );
   }
 
-  const meta = STATUS_LABELS[op.status] ?? { label: op.status, tone: "chip-info" };
+  const meta = STATUS_META[op.status] ?? { label: op.status, chip: "chip-info" };
 
   return (
     <AppShell>
@@ -60,24 +54,20 @@ function OperacaoDetail() {
             {op.exporter_name || "—"} · {op.beneficiary_country || "—"}
           </p>
         </div>
-        <span className={"chip text-[11px] " + meta.tone}>{meta.label}</span>
+        <span className={"chip text-[11px] " + meta.chip}>{meta.label}</span>
       </div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-surface p-7 ring-1 ring-secondary/30">
         <div className="flex items-start gap-4">
-          {op.status === "COMPLETED" ? (
+          {op.status === "COMPLETED" || op.status === "PAYMENT_RELEASED" ? (
             <CheckCircle2 className="h-10 w-10 text-success shrink-0" />
-          ) : op.status === "ACTIVE" ? (
+          ) : isActive(op.status) ? (
             <Shield className="h-10 w-10 text-secondary shrink-0" />
           ) : (
             <Clock className="h-10 w-10 text-warning shrink-0" />
           )}
           <div>
-            <h2 className="text-xl font-semibold">
-              {op.status === "COMPLETED" ? "Operação liquidada" :
-               op.status === "ACTIVE"  ? "Operação ativa — pagamento protegido" :
-                                         "Operação cancelada"}
-            </h2>
+            <h2 className="text-xl font-semibold">{meta.label}</h2>
             <p className="text-sm text-muted-foreground mt-1">
               Status atualizado em {new Date(op.updated_at).toLocaleString("pt-BR")}
             </p>

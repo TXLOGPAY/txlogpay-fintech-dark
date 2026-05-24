@@ -37,13 +37,28 @@ export function useOperation(id: string | undefined) {
   });
 }
 
-export function useMarkOperationActive() {
+export function useSubmitReceipt() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => operationsDb.markActive(id),
+    mutationFn: (args: { id: string; url: string; name: string }) =>
+      operationsDb.submitReceipt(args.id, args.url, args.name),
     onSuccess: (op) => {
       qc.invalidateQueries({ queryKey: ["operations"] });
       qc.setQueryData(KEYS.detail(op.id), op);
     },
   });
 }
+
+export function useValidatePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => operationsDb.validatePayment(id),
+    onSuccess: (op) => {
+      qc.invalidateQueries({ queryKey: ["operations"] });
+      qc.setQueryData(KEYS.detail(op.id), op);
+    },
+  });
+}
+
+// Backward-compat alias
+export const useMarkOperationActive = useValidatePayment;

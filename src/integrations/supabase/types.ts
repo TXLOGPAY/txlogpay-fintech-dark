@@ -33,6 +33,9 @@ export type Database = {
           invoice_number: string | null
           operation_code: string
           payment_proof_url: string | null
+          payment_receipt_name: string | null
+          payment_receipt_url: string | null
+          payment_submitted_at: string | null
           protected_amount: number
           release_trigger: string | null
           siscomex_reference: string | null
@@ -60,6 +63,9 @@ export type Database = {
           invoice_number?: string | null
           operation_code: string
           payment_proof_url?: string | null
+          payment_receipt_name?: string | null
+          payment_receipt_url?: string | null
+          payment_submitted_at?: string | null
           protected_amount?: number
           release_trigger?: string | null
           siscomex_reference?: string | null
@@ -87,6 +93,9 @@ export type Database = {
           invoice_number?: string | null
           operation_code?: string
           payment_proof_url?: string | null
+          payment_receipt_name?: string | null
+          payment_receipt_url?: string | null
+          payment_submitted_at?: string | null
           protected_amount?: number
           release_trigger?: string | null
           siscomex_reference?: string | null
@@ -139,7 +148,14 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      operation_status: "PENDING_PAYMENT" | "ACTIVE" | "COMPLETED" | "CANCELLED"
+      operation_status:
+        | "PENDING_PAYMENT"
+        | "PAYMENT_UNDER_REVIEW"
+        | "OPERATION_MONITORING"
+        | "PAYMENT_RELEASED"
+        | "ACTIVE"
+        | "COMPLETED"
+        | "CANCELLED"
       user_tier: "STANDARD" | "ENTERPRISE" | "VIP" | "ANCHOR_PARTNER"
     }
     CompositeTypes: {
@@ -268,7 +284,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      operation_status: ["PENDING_PAYMENT", "ACTIVE", "COMPLETED", "CANCELLED"],
+      operation_status: [
+        "PENDING_PAYMENT",
+        "PAYMENT_UNDER_REVIEW",
+        "OPERATION_MONITORING",
+        "PAYMENT_RELEASED",
+        "ACTIVE",
+        "COMPLETED",
+        "CANCELLED",
+      ],
       user_tier: ["STANDARD", "ENTERPRISE", "VIP", "ANCHOR_PARTNER"],
     },
   },
