@@ -20,8 +20,8 @@ export const Route = createFileRoute("/dashboard")({
 const TRADITIONAL_LC_RATE = 0.025;
 
 function computeKpis(all: DBOperation[]) {
-  const active = all.filter((o) => o.status === "ACTIVE");
-  const completed = all.filter((o) => o.status === "COMPLETED");
+  const active = all.filter((o) => o.status === "ACTIVE" || o.status === "OPERATION_MONITORING");
+  const completed = all.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
   // KPIs executivos consideram apenas operações ATIVAS e CONCLUÍDAS
   const counted = [...active, ...completed];
   const protectedAmount = active.reduce((s, o) => s + Number(o.protected_amount || 0), 0);

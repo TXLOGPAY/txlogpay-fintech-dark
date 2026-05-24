@@ -23,8 +23,9 @@ const TRADITIONAL_LC_RATE = 0.025;
 
 function computeFinancials(ops: DBOperation[]) {
   const pending = ops.filter((o) => o.status === "PENDING_PAYMENT");
-  const active = ops.filter((o) => o.status === "ACTIVE");
-  const completed = ops.filter((o) => o.status === "COMPLETED");
+  const underReview = ops.filter((o) => o.status === "PAYMENT_UNDER_REVIEW");
+  const active = ops.filter((o) => o.status === "ACTIVE" || o.status === "OPERATION_MONITORING");
+  const completed = ops.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
 
   const protectedActive = active.reduce((s, o) => s + Number(o.protected_amount || 0), 0);
   const released = completed.reduce((s, o) => s + Number(o.protected_amount || 0), 0);
@@ -32,7 +33,7 @@ function computeFinancials(ops: DBOperation[]) {
   const traditionalCost = ops.reduce((s, o) => s + Number(o.protected_amount || 0) * TRADITIONAL_LC_RATE, 0);
   const savings = Math.max(0, traditionalCost - totalFees);
 
-  return { pending, active, completed, protectedActive, released, totalFees, savings };
+  return { pending, underReview, active, completed, protectedActive, released, totalFees, savings };
 }
 
 function monthlySeries(ops: DBOperation[]) {
