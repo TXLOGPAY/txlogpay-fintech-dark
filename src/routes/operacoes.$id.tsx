@@ -24,7 +24,6 @@ export const Route = createFileRoute("/operacoes/$id")({
 
 function OperacaoDetail() {
   const { id } = Route.useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { data: op, isLoading, error } = useOperation(id);
   const submitReceipt = useSubmitReceipt();
