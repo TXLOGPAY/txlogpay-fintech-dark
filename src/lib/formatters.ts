@@ -10,12 +10,22 @@ const CURRENCY_LOCALE: Record<Currency, string> = {
   GBP: "en-GB",
 };
 
-export function formatCurrency(value: number, currency: Currency | string): string {
+/**
+ * Executive currency format — institutional fintech style.
+ * Default: "USD 125,000" (no decimals, en-US grouping).
+ * Pass { decimals: 2 } for fee-level precision.
+ */
+export function formatCurrency(
+  value: number,
+  currency: Currency | string = "USD",
+  opts?: { decimals?: number },
+): string {
   const cur = (currency as Currency) in CURRENCY_LOCALE ? (currency as Currency) : "USD";
-  if (!Number.isFinite(value)) return `${cur} 0,00`;
-  const formatted = new Intl.NumberFormat(CURRENCY_LOCALE[cur], {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const decimals = opts?.decimals ?? 0;
+  if (!Number.isFinite(value)) return `${cur} 0`;
+  const formatted = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   }).format(value);
   return `${cur} ${formatted}`;
 }
