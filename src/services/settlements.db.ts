@@ -26,7 +26,7 @@ export const settlementsDb = {
       .limit(1)
       .maybeSingle();
     if (error) return null;
-    return (data as Settlement) ?? null;
+    return (data as unknown as Settlement) ?? null;
   },
 
   /**
