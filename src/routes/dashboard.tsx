@@ -7,7 +7,7 @@ import {
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useAllOperations } from "@/hooks/use-operations";
 import { useAuth } from "@/hooks/use-auth";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, toUSD } from "@/lib/formatters";
 import { USER_TIER_BADGE } from "@/types/profile.types";
 import type { DBOperation } from "@/services/operations.db";
 import type { UserTier } from "@/domain/user";
@@ -22,15 +22,17 @@ const TRADITIONAL_LC_RATE = 0.025;
 function computeKpis(all: DBOperation[]) {
   const active = all.filter((o) => o.status === "ACTIVE" || o.status === "OPERATION_MONITORING");
   const completed = all.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
-  // KPIs executivos consideram apenas operações ATIVAS e CONCLUÍDAS
+  // KPIs executivos consideram apenas operações ATIVAS e CONCLUÍDAS, normalizando para USD
   const counted = [...active, ...completed];
-  const protectedAmount = active.reduce((s, o) => s + Number(o.protected_amount || 0), 0);
-  const volume = counted.reduce((s, o) => s + Number(o.protected_amount || 0), 0);
-  const fees = counted.reduce((s, o) => s + Number(o.fee_amount || 0), 0);
-  const traditional = counted.reduce((s, o) => s + Number(o.protected_amount || 0) * TRADITIONAL_LC_RATE, 0);
+  const usdProtected = (o: DBOperation) => toUSD(Number(o.protected_amount || 0), o.currency);
+  const usdFee = (o: DBOperation) => toUSD(Number(o.fee_amount || 0), o.currency);
+  const protectedAmount = active.reduce((s, o) => s + usdProtected(o), 0);
+  const volume = counted.reduce((s, o) => s + usdProtected(o), 0);
+  const fees = counted.reduce((s, o) => s + usdFee(o), 0);
+  const traditional = counted.reduce((s, o) => s + usdProtected(o) * TRADITIONAL_LC_RATE, 0);
   const savings = Math.max(0, traditional - fees);
   return {
-    protectedAmount, volume, savings,
+    protectedAmount, volume, savings, fees,
     activeCount: active.length, completedCount: completed.length,
     counted,
   };
@@ -49,7 +51,7 @@ function monthlySeries(ops: DBOperation[]) {
     const d = new Date(o.created_at);
     const key = `${d.getFullYear()}-${d.getMonth()}`;
     const b = buckets.get(key);
-    if (b) { b.volume += Number(o.protected_amount || 0); b.count++; }
+    if (b) { b.volume += toUSD(Number(o.protected_amount || 0), o.currency); b.count++; }
   }
   return Array.from(buckets.values());
 }
