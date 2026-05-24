@@ -636,10 +636,10 @@ function Step4Guarantee() {
           </div>
           <div className="rounded-xl glass p-5 space-y-3 text-sm">
             <div className="font-semibold flex items-center gap-2">
-              <Lock className="h-4 w-4 text-secondary" /> Garantia em custódia digital
+              <Lock className="h-4 w-4 text-secondary" /> Garantia operacional protegida
             </div>
             <p className="text-xs text-muted-foreground">
-              Os fundos são reservados no Stellar Anchor (mock) e liberados via Smart Contract Settlement quando o trigger ocorrer.
+              Os fundos ficam retidos em conta segregada e são liberados ao exportador na confirmação do evento operacional acordado.
             </p>
           </div>
         </div>
