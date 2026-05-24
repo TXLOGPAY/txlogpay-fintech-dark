@@ -64,14 +64,19 @@ function monthlySeries(ops: DBOperation[], rates: FxRates, forceUsd: boolean) {
 
 function Dashboard() {
   const { data: ops = [], isLoading, error } = useAllOperations();
+  const { data: fx } = useQuery({
+    queryKey: ["fx", "usd-base-rates"],
+    queryFn: fetchUsdBaseRates,
+    staleTime: 5 * 60 * 1000,
+  });
   const { profile } = useAuth();
   const tier: UserTier = (profile?.tier as UserTier) ?? "STANDARD";
   const tierMeta = USER_TIER_BADGE[tier];
 
-  const k = computeKpis(ops);
-  const series = monthlySeries(k.counted);
-  const ccy = "USD"; // consolidação executiva sempre em USD (FX normalizado)
+  const k = computeKpis(ops, fx?.rates ?? { USD: 1 }, fx?.fxTimestamp ?? null);
+  const series = monthlySeries(k.counted, fx?.rates ?? { USD: 1 }, k.volumeTotal.isConverted);
   const isNewUser = ops.length === 0;
+  const fxTooltip = "Valores convertidos para USD com referência cambial em tempo real.";
 
   return (
     <AppShell topbar={
@@ -103,9 +108,9 @@ function Dashboard() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-            <Kpi icon={Shield}      label="Total Protegido"     value={formatCurrency(k.protectedAmount, ccy)} chip="Garantia ativa" chipClass="chip-cargo" featured />
-            <Kpi icon={Wallet}      label="Volume Financeiro"   value={formatCurrency(k.volume, ccy)}          chip={`${k.counted.length} operações`} chipClass="chip-info" />
-            <Kpi icon={TrendingUp}  label="Economia Acumulada"  value={formatCurrency(k.savings, ccy)}         chip="vs. carta de crédito" chipClass="chip-success" />
+            <Kpi icon={Shield}      label="Total Protegido"     value={formatCurrency(k.protectedTotal.amount, k.protectedTotal.currency)} chip="Garantia ativa" chipClass="chip-cargo" featured tooltip={k.protectedTotal.isConverted ? fxTooltip : undefined} />
+            <Kpi icon={Wallet}      label="Volume Financeiro"   value={formatCurrency(k.volumeTotal.amount, k.volumeTotal.currency)}          chip={`${k.counted.length} operações`} chipClass="chip-info" tooltip={k.volumeTotal.isConverted ? fxTooltip : undefined} />
+            <Kpi icon={TrendingUp}  label="Economia Acumulada"  value={formatCurrency(k.savingsTotal.amount, k.savingsTotal.currency)}         chip="vs. carta de crédito" chipClass="chip-success" tooltip={k.savingsTotal.isConverted ? fxTooltip : undefined} />
             <Kpi icon={CheckCircle2} label="Operações Concluídas" value={String(k.completedCount)}             chip={`${k.activeCount} ativas`} chipClass="chip-info" />
           </div>
 
@@ -130,7 +135,7 @@ function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} axisLine={false} tickLine={false} width={50} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
-                    <Tooltip contentStyle={{ background: "var(--surface-container)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => formatCurrency(v, ccy)} labelFormatter={(l) => `Mês: ${l}`} />
+                    <Tooltip contentStyle={{ background: "var(--surface-container)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => formatCurrency(v, k.volumeTotal.currency)} labelFormatter={(l) => `Mês: ${l}`} />
                     <Area type="monotone" dataKey="volume" stroke="oklch(0.85 0.18 200)" strokeWidth={2} fill="url(#vol)" />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -161,7 +166,7 @@ function Dashboard() {
                         <div className="text-xs text-muted-foreground mt-0.5">{o.exporter_name || "—"} · {o.beneficiary_country || "—"}</div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold">{formatCurrency(Number(o.protected_amount), o.currency)}</div>
+                        <div className="font-semibold">{formatCurrency(getProtectedAmount(o), o.currency)}</div>
                         <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-0.5">{o.status}</div>
                       </div>
                     </Link>
@@ -175,10 +180,10 @@ function Dashboard() {
                 <Shield className="h-4 w-4 text-secondary" /> Resumo Financeiro
               </h2>
               <div className="space-y-4 text-sm">
-                <Row label="Total protegido"    value={formatCurrency(k.protectedAmount, ccy)} highlight />
-                <Row label="Volume transacionado" value={formatCurrency(k.volume, ccy)} />
-                <Row label="Fees pagos"          value={formatCurrency(k.fees, ccy)} />
-                <Row label="Economia gerada"     value={formatCurrency(k.savings, ccy)} />
+                <Row label="Total protegido"    value={formatCurrency(k.protectedTotal.amount, k.protectedTotal.currency)} highlight />
+                <Row label="Volume transacionado" value={formatCurrency(k.volumeTotal.amount, k.volumeTotal.currency)} />
+                <Row label="Fees pagos"          value={formatCurrency(k.feesTotal.amount, k.feesTotal.currency)} />
+                <Row label="Economia gerada"     value={formatCurrency(k.savingsTotal.amount, k.savingsTotal.currency)} />
                 <div className="h-px bg-border my-2" />
                 <Row label="Ativas"    value={String(k.activeCount)} />
                 <Row label="Concluídas" value={String(k.completedCount)} />
