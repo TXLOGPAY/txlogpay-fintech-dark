@@ -461,6 +461,9 @@ function OperationTimeline({ op, settlement, siscomexStatus }: {
     { key: "received", title: "Comprovante recebido", desc: "Comprovante enviado pelo importador.", icon: FileCheck2, at: op.payment_submitted_at },
     { key: "validated", title: "Garantia validada", desc: "Compliance confirmou os fundos em custódia.", icon: Shield, at: op.activated_at },
     { key: "monitoring", title: "Monitoramento operacional", desc: monitoringDesc, icon: Truck, at: reached(2) ? op.activated_at : null },
+    { key: "settlement_started", title: "Liquidação internacional iniciada", desc: "Liquidação internacional disparada pelo motor de pagamentos.", icon: Radio, at: settledAt },
+    { key: "settlement_confirmed", title: "Liquidação internacional", desc: "Rede internacional confirmou a liquidação dos fundos.", icon: Landmark, at: settledOk ? settledAt : null },
+    { key: "ledger_confirmed", title: "Ledger confirmado", desc: "Registro imutável da liquidação no ledger de referência.", icon: Activity, at: settlement?.ledger ? settledAt : null },
     { key: "settled", title: "Operação liquidada", desc: "Ciclo financeiro encerrado com sucesso.", icon: PackageCheck, at: status === "COMPLETED" ? op.updated_at : null },
   ];
 
