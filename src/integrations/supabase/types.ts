@@ -23,6 +23,7 @@ export type Database = {
           bl_awb: string | null
           created_at: string
           currency: string
+          current_operational_status: string | null
           duimp: string | null
           exporter_name: string | null
           fee_amount: number
@@ -62,6 +63,7 @@ export type Database = {
           bl_awb?: string | null
           created_at?: string
           currency?: string
+          current_operational_status?: string | null
           duimp?: string | null
           exporter_name?: string | null
           fee_amount?: number
@@ -101,6 +103,7 @@ export type Database = {
           bl_awb?: string | null
           created_at?: string
           currency?: string
+          current_operational_status?: string | null
           duimp?: string | null
           exporter_name?: string | null
           fee_amount?: number

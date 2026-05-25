@@ -41,12 +41,10 @@ const ALLOWED_COLUMNS = [
   // FX normalisation columns
   "operation_currency", "usd_conversion_rate", "usd_normalized_value", "fx_reference_date",
   "fx_currency_used", "fx_rate_to_usd",
-  "invoice_number", "bl_awb", "duimp", "siscomex_reference",
-  "payment_proof_url",
-  "payment_receipt_url", "payment_receipt_name", "payment_submitted_at",
-  "activated_at", "created_at", "updated_at",
-  // FX normalisation columns
-  "operation_currency", "usd_conversion_rate", "usd_normalized_value", "fx_reference_date",
+  // SISCOMEX operational status (distinct from macro `status`)
+  "current_operational_status",
+  // Stellar wallet
+  "operation_wallet",
 ] as const;
 
 function pickAllowed<T extends Record<string, unknown>>(input: T): Partial<DBOperationInsert> {
