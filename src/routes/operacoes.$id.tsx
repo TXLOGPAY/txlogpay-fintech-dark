@@ -83,16 +83,47 @@ function OperacaoDetail() {
   const createWalletFn = useServerFn(createOperationWallet);
   const [walletDebugLoading, setWalletDebugLoading] = useState(false);
   async function handleTestStellarWallet() {
-    if (!id) return;
+    // 1. Prova de clique
+    console.log("TEST BUTTON CLICKED", { id });
+    toast.info("Teste iniciado", { description: `operationId: ${id ?? "(vazio)"}` });
+
+    if (!id) {
+      console.error("WALLET TEST ERROR: id ausente");
+      toast.error("operationId ausente — handler abortado");
+      return;
+    }
+
     setWalletDebugLoading(true);
     try {
-      const { publicKey } = await createWalletFn({ data: { operationId: id } });
-      toast.success("Wallet operacional criada com sucesso", {
-        description: `Public Key: ${publicKey}`,
+      // 2. Update simples e direto no Supabase (sem Stellar / Friendbot / serverFn)
+      const { supabase } = await import("@/integrations/supabase/client");
+      const testValue = `TEST_${Date.now()}`;
+      console.log("[wallet-debug] iniciando update", { id, testValue });
+
+      const { data: authData } = await supabase.auth.getUser();
+      console.log("[wallet-debug] auth user", authData?.user?.id);
+
+      const { data, error } = await supabase
+        .from("operations")
+        .update({ operation_wallet: testValue })
+        .eq("id", id)
+        .select("id, operation_wallet")
+        .single();
+
+      if (error) {
+        console.error("WALLET TEST ERROR — supabase update", error);
+        toast.error("Falha no update Supabase", { description: error.message });
+        return;
+      }
+
+      console.log("[wallet-debug] update OK", data);
+      toast.success("Teste Supabase concluído", {
+        description: `operation_wallet = ${data?.operation_wallet}`,
         duration: 12000,
       });
     } catch (e) {
-      toast.error("Falha ao criar wallet Stellar", {
+      console.error("WALLET TEST ERROR", e);
+      toast.error("Exception no handler", {
         description: e instanceof Error ? e.message : String(e),
       });
     } finally {
