@@ -50,26 +50,37 @@ export function useSubmitReceipt() {
   });
 }
 
+/**
+ * Validação da garantia: marca a operação como ativa (monitoramento).
+ * NÃO dispara settlement — isso ocorre apenas quando o evento Siscomex
+ * casa com o release_trigger.
+ */
 export function useValidatePayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => operationsDb.validatePayment(id),
+    onSuccess: (op) => {
+      qc.invalidateQueries({ queryKey: ["operations"] });
+      qc.setQueryData(KEYS.detail(op.id), op);
+    },
+  });
+}
+
+/**
+ * Executa a liquidação internacional (Stellar Testnet) para a operação.
+ * Disparado automaticamente quando o evento Siscomex casa com o release_trigger.
+ */
+export function useExecuteSettlement() {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const op = await operationsDb.validatePayment(id);
-      // Dispara liquidação internacional (Stellar testnet) em background — UX invisível.
-      if (user?.id) {
-        try {
-          await settlementsDb.createForOperation(id, user.id);
-        } catch (e) {
-          console.error("[settlement] falhou:", e);
-        }
-      }
-      return op;
+    mutationFn: async (args: { operationId: string; currency: string }) => {
+      if (!user?.id) throw new Error("Usuário não autenticado");
+      return settlementsDb.createForOperation(args.operationId, user.id, args.currency);
     },
-    onSuccess: (op) => {
+    onSuccess: (settlement) => {
       qc.invalidateQueries({ queryKey: ["operations"] });
-      qc.invalidateQueries({ queryKey: ["settlement", op.id] });
-      qc.setQueryData(KEYS.detail(op.id), op);
+      qc.invalidateQueries({ queryKey: ["settlement", settlement.operation_id] });
     },
   });
 }

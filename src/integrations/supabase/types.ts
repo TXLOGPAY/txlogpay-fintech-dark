@@ -168,12 +168,16 @@ export type Database = {
         Row: {
           amount: number
           asset: string
+          asset_code: string | null
+          confirmation_code: string | null
           created_at: string
           destination_wallet: string
           id: string
           ledger: number | null
           network: string
+          operation_currency: string | null
           operation_id: string
+          source_wallet: string | null
           status: string
           successful: boolean
           tx_hash: string
@@ -182,12 +186,16 @@ export type Database = {
         Insert: {
           amount?: number
           asset?: string
+          asset_code?: string | null
+          confirmation_code?: string | null
           created_at?: string
           destination_wallet: string
           id?: string
           ledger?: number | null
           network?: string
+          operation_currency?: string | null
           operation_id: string
+          source_wallet?: string | null
           status?: string
           successful?: boolean
           tx_hash: string
@@ -196,12 +204,16 @@ export type Database = {
         Update: {
           amount?: number
           asset?: string
+          asset_code?: string | null
+          confirmation_code?: string | null
           created_at?: string
           destination_wallet?: string
           id?: string
           ledger?: number | null
           network?: string
+          operation_currency?: string | null
           operation_id?: string
+          source_wallet?: string | null
           status?: string
           successful?: boolean
           tx_hash?: string
