@@ -70,59 +70,45 @@ function OperacaoDetail() {
     }
   }, [op?.payment_receipt_url]);
 
-  // ---------- Siscomex simulator (client-side, persisted per operation) ----------
-  const storageKey = `siscomex:${id}`;
-  const [siscomexIdx, setSiscomexIdx] = useState<number>(() => {
-    if (typeof window === "undefined") return -1;
-    const v = window.localStorage.getItem(`siscomex:${id}`);
-    return v ? Number(v) : -1;
-  });
+  // ---------- SISCOMEX operational status — persistido em operations.current_operational_status ----------
+  // Esse campo é o STATUS OPERACIONAL SISCOMEX, separado de `operations.status` (macro).
+  const currentOperationalStatus =
+    (op?.current_operational_status as SiscomexKey | null | undefined) ?? null;
+  const siscomexIdx = currentOperationalStatus
+    ? SISCOMEX_SEQUENCE.findIndex((s) => s.key === currentOperationalStatus)
+    : -1;
   const currentSiscomex = siscomexIdx >= 0 ? SISCOMEX_SEQUENCE[siscomexIdx] : null;
+  const [advancing, setAdvancing] = useState(false);
 
   // ---------- DEBUG: teste isolado da engine Stellar Testnet ----------
   const createWalletFn = useServerFn(createOperationWallet);
   const [walletDebugLoading, setWalletDebugLoading] = useState(false);
   async function handleTestStellarWallet() {
-    // 1. Prova de clique
     console.log("TEST BUTTON CLICKED", { id });
     toast.info("Teste iniciado", { description: `operationId: ${id ?? "(vazio)"}` });
-
     if (!id) {
-      console.error("WALLET TEST ERROR: id ausente");
       toast.error("operationId ausente — handler abortado");
       return;
     }
-
     setWalletDebugLoading(true);
     try {
-      // 2. Update simples e direto no Supabase (sem Stellar / Friendbot / serverFn)
       const { supabase } = await import("@/integrations/supabase/client");
       const testValue = `TEST_${Date.now()}`;
-      console.log("[wallet-debug] iniciando update", { id, testValue });
-
-      const { data: authData } = await supabase.auth.getUser();
-      console.log("[wallet-debug] auth user", authData?.user?.id);
-
       const { data, error } = await supabase
         .from("operations")
         .update({ operation_wallet: testValue })
         .eq("id", id)
         .select("id, operation_wallet")
         .single();
-
       if (error) {
-        console.error("WALLET TEST ERROR — supabase update", error);
         toast.error("Falha no update Supabase", { description: error.message });
         return;
       }
-
-      console.log("[wallet-debug] update OK", data);
       toast.success("Teste Supabase concluído", {
         description: `operation_wallet = ${data?.operation_wallet}`,
         duration: 12000,
       });
     } catch (e) {
-      console.error("WALLET TEST ERROR", e);
       toast.error("Exception no handler", {
         description: e instanceof Error ? e.message : String(e),
       });
@@ -131,23 +117,35 @@ function OperacaoDetail() {
     }
   }
 
-  function advanceSiscomex() {
+  async function advanceSiscomex() {
+    if (!id || advancing) return;
     if (siscomexIdx >= SISCOMEX_SEQUENCE.length - 1) return;
-    const next = siscomexIdx + 1;
-    setSiscomexIdx(next);
-    try { window.localStorage.setItem(storageKey, String(next)); } catch { /* noop */ }
+    const next = SISCOMEX_SEQUENCE[siscomexIdx + 1];
+    setAdvancing(true);
+    try {
+      await operationsDb.update(id, { current_operational_status: next.key });
+      qc.invalidateQueries({ queryKey: ["operations", "detail", id] });
+      qc.invalidateQueries({ queryKey: ["operations"] });
+    } catch (e) {
+      toast.error("Falha ao avançar evento SISCOMEX", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setAdvancing(false);
+    }
   }
 
-  // Gatilho automático: quando current_status === release_trigger e a operação
-  // está ativa (garantia validada), dispara a liquidação internacional.
+  // Gatilho automático — compara o ENUM operacional SISCOMEX com o release_trigger.
+  // NÃO compara com `operations.status` (macro).
   useEffect(() => {
-    if (!currentSiscomex || !op) return;
-    const current_status = currentSiscomex.key;                          // ENUM
-    const release_trigger = (op.release_trigger || "").toUpperCase();    // ENUM
-    const matched = !!release_trigger && current_status === release_trigger;
-    // Log temporário de auditoria do gatilho automático
+    if (!op) return;
+    const operation_status = op.status;
+    const operational_status = currentSiscomex?.key ?? null;
+    const release_trigger = (op.release_trigger || "").toUpperCase();
+    const matched =
+      !!operational_status && !!release_trigger && operational_status === release_trigger;
     // eslint-disable-next-line no-console
-    console.log("[settlement-trigger]", { current_status, release_trigger, matched });
+    console.log({ operation_status, operational_status, release_trigger, matched });
     if (!matched) return;
     if (settlement || executeSettlement.isPending) return;
     if (!isActive(op.status)) return;
