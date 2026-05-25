@@ -12,15 +12,22 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 
-const SISCOMEX_SEQUENCE = [
-  { key: "CREATED",           label: "Operação criada" },
-  { key: "EXPORTER_ACCEPTED", label: "Exportador confirmou a operação" },
-  { key: "CARGO_SHIPPED",     label: "Carga embarcada pelo exportador" },
-  { key: "IN_TRANSIT",        label: "Transporte internacional em andamento" },
-  { key: "CUSTOMS_ARRIVAL",   label: "Carga recebida na alfândega" },
-  { key: "CUSTOMS_RELEASED",  label: "Desembaraço aduaneiro concluído" },
-] as const;
-type SiscomexKey = typeof SISCOMEX_SEQUENCE[number]["key"];
+// ---------------------------------------------------------------------------
+// SISCOMEX — Enum operacional (persistido) × Label visual (UI).
+// A automação compara EXCLUSIVAMENTE enums. A UI lê via mapper visual.
+// ---------------------------------------------------------------------------
+const SISCOMEX_VISUAL_LABELS = {
+  CREATED:           "Operação criada",
+  EXPORTER_ACCEPTED: "Exportador confirmou a operação",
+  CARGO_SHIPPED:     "Carga embarcada pelo exportador",
+  IN_TRANSIT:        "Transporte internacional em andamento",
+  CUSTOMS_ARRIVAL:   "Carga recebida na alfândega",
+  CUSTOMS_RELEASED:  "Desembaraço aduaneiro concluído",
+} as const;
+type SiscomexKey = keyof typeof SISCOMEX_VISUAL_LABELS;
+const SISCOMEX_SEQUENCE: ReadonlyArray<{ key: SiscomexKey; label: string }> =
+  (Object.keys(SISCOMEX_VISUAL_LABELS) as SiscomexKey[])
+    .map((key) => ({ key, label: SISCOMEX_VISUAL_LABELS[key] }));
 import {
   useOperation, useSubmitReceipt, useValidatePayment, useSettlement, useExecuteSettlement,
 } from "@/hooks/use-operations";
