@@ -87,31 +87,23 @@ function OperacaoDetail() {
   const [walletDebugLoading, setWalletDebugLoading] = useState(false);
   async function handleTestStellarWallet() {
     console.log("TEST BUTTON CLICKED", { id });
-    toast.info("Teste iniciado", { description: `operationId: ${id ?? "(vazio)"}` });
     if (!id) {
-      toast.error("operationId ausente — handler abortado");
+      toast.error("operationId ausente");
       return;
     }
+    toast.info("Gerando wallet Stellar real…");
     setWalletDebugLoading(true);
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const testValue = `TEST_${Date.now()}`;
-      const { data, error } = await supabase
-        .from("operations")
-        .update({ operation_wallet: testValue })
-        .eq("id", id)
-        .select("id, operation_wallet")
-        .single();
-      if (error) {
-        toast.error("Falha no update Supabase", { description: error.message });
-        return;
-      }
-      toast.success("Teste Supabase concluído", {
-        description: `operation_wallet = ${data?.operation_wallet}`,
+      const res = await createWalletFn({ data: { operationId: id } });
+      console.log({ walletCreated: res?.publicKey });
+      toast.success("Wallet gerada", {
+        description: res?.publicKey,
         duration: 12000,
       });
+      qc.invalidateQueries({ queryKey: ["operations", "detail", id] });
     } catch (e) {
-      toast.error("Exception no handler", {
+      console.error("WALLET CREATE ERROR", e);
+      toast.error("Falha na geração da wallet", {
         description: e instanceof Error ? e.message : String(e),
       });
     } finally {
@@ -137,25 +129,48 @@ function OperacaoDetail() {
     }
   }
 
-  // Gatilho automático — compara o ENUM operacional SISCOMEX com o release_trigger.
-  // NÃO compara com `operations.status` (macro).
+  // Gatilho automático — observa APENAS current_operational_status vs release_trigger.
+  // NÃO depende de operations.status (macro).
+  const settlementStartedRef = useRef(false);
   useEffect(() => {
-    if (!op) return;
-    const operation_status = op.status;
-    const operational_status = currentSiscomex?.key ?? null;
+    if (!op || !id) return;
+    const current_operational_status = (op.current_operational_status || "").toUpperCase();
     const release_trigger = (op.release_trigger || "").toUpperCase();
     const matched =
-      !!operational_status && !!release_trigger && operational_status === release_trigger;
+      !!current_operational_status &&
+      !!release_trigger &&
+      current_operational_status === release_trigger;
     // eslint-disable-next-line no-console
-    console.log({ operation_status, operational_status, release_trigger, matched });
+    console.log({ release_trigger, current_operational_status, matched });
     if (!matched) return;
     if (settlement || executeSettlement.isPending) return;
-    if (!isActive(op.status)) return;
-    executeSettlement
-      .mutateAsync({ operationId: id, currency: op.currency })
-      .catch(() => { /* swallow — UX invisível */ });
+    if (settlementStartedRef.current) return;
+    settlementStartedRef.current = true;
+
+    (async () => {
+      try {
+        // 1. Marca status macro como liquidação em curso
+        await operationsDb.update(id, { status: "SETTLEMENT_IN_PROGRESS" as never });
+        qc.invalidateQueries({ queryKey: ["operations", "detail", id] });
+
+        // 2. Cria wallet operacional real (server fn — Friendbot + persistência)
+        try {
+          const w = await createWalletFn({ data: { operationId: id } });
+          console.log({ walletCreated: w?.publicKey });
+        } catch (we) {
+          // Friendbot pode falhar — não bloqueia o settlement
+          console.warn("Wallet creation falhou (ignorado):", we);
+        }
+
+        // 3. Executa settlement on-chain
+        await executeSettlement.mutateAsync({ operationId: id, currency: op.currency });
+      } catch (e) {
+        console.error("SETTLEMENT FLOW ERROR", e);
+        settlementStartedRef.current = false;
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSiscomex?.key, op?.release_trigger, op?.status, settlement?.id]);
+  }, [op?.current_operational_status, op?.release_trigger, settlement?.id]);
 
   if (isLoading) {
     return <AppShell><div className="grid place-items-center py-20"><Loader2 className="h-6 w-6 text-secondary animate-spin" /></div></AppShell>;
