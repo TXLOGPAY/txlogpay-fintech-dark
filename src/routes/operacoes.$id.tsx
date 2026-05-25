@@ -79,6 +79,27 @@ function OperacaoDetail() {
   });
   const currentSiscomex = siscomexIdx >= 0 ? SISCOMEX_SEQUENCE[siscomexIdx] : null;
 
+  // ---------- DEBUG: teste isolado da engine Stellar Testnet ----------
+  const createWalletFn = useServerFn(createOperationWallet);
+  const [walletDebugLoading, setWalletDebugLoading] = useState(false);
+  async function handleTestStellarWallet() {
+    if (!id) return;
+    setWalletDebugLoading(true);
+    try {
+      const { publicKey } = await createWalletFn({ data: { operationId: id } });
+      toast.success("Wallet operacional criada com sucesso", {
+        description: `Public Key: ${publicKey}`,
+        duration: 12000,
+      });
+    } catch (e) {
+      toast.error("Falha ao criar wallet Stellar", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setWalletDebugLoading(false);
+    }
+  }
+
   function advanceSiscomex() {
     if (siscomexIdx >= SISCOMEX_SEQUENCE.length - 1) return;
     const next = siscomexIdx + 1;
