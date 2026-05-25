@@ -204,11 +204,27 @@ function OperacaoDetail() {
       <div className={(showPaymentActions ? "grid lg:grid-cols-2" : "grid grid-cols-1") + " gap-5 mt-5 items-start"}>
         {/* LEFT — Timeline */}
         <div className="card-surface p-6 order-2 lg:order-1">
-          <h3 className="text-base font-semibold mb-5 flex items-center gap-2">
-            <Zap className="h-4 w-4 text-secondary" /> Timeline operacional
-          </h3>
-          <OperationTimeline op={op} settlement={settlement ?? null} />
+          <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <Zap className="h-4 w-4 text-secondary" /> Timeline operacional
+            </h3>
+            <button
+              onClick={advanceSiscomex}
+              disabled={siscomexIdx >= SISCOMEX_SEQUENCE.length - 1}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-mono uppercase tracking-widest border border-secondary/40 text-secondary hover:bg-secondary/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Avança o próximo evento Siscomex (simulador)"
+            >
+              <PlayCircle className="h-3.5 w-3.5" />
+              Simular evento operacional
+            </button>
+          </div>
+          <OperationTimeline
+            op={op}
+            settlement={settlement ?? null}
+            siscomexStatus={currentSiscomex}
+          />
         </div>
+
 
         {/* RIGHT — receipt + hackathon validation */}
         {showPaymentActions && <div className="space-y-5 order-1 lg:order-2">
