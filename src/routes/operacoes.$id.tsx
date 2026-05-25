@@ -1,16 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
 import { motion } from "motion/react";
 import {
   CheckCircle2, Shield, Zap, FileText, Clock, Loader2,
   Upload, FileCheck2, X, ExternalLink, Sparkles, AlertTriangle,
   PackageCheck, Banknote, Truck, Landmark, Globe, ArrowRight, Radio, PlayCircle,
-  Receipt, Building2, ShieldCheck,
+  Receipt, Building2, ShieldCheck, Wallet,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { createOperationWallet } from "@/lib/wallet.functions";
+import { toast } from "sonner";
+
 
 // ---------------------------------------------------------------------------
 // SISCOMEX — Enum operacional (persistido) × Label visual (UI).
