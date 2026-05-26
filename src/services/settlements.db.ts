@@ -61,7 +61,8 @@ export const settlementsDb = {
     const row = {
       operation_id: operationId,
       user_id: userId,
-      tx_hash: result.hash,
+      stellar_tx_hash: result.hash,
+      transaction_hash: result.hash,
       ledger: result.ledger ?? null,
       amount: 10,
       asset: "XLM",

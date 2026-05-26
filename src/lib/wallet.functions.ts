@@ -3,6 +3,10 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import * as StellarSdk from "@stellar/stellar-sdk";
 
+const server = new StellarSdk.Horizon.Server(
+  "https://horizon-testnet.stellar.org"
+);
+
 /**
  * DEBUG — Teste isolado da engine Stellar Testnet.
  * Gera um Keypair, fundeia via Friendbot e persiste APENAS a public key
@@ -14,26 +18,54 @@ export const createOperationWallet = createServerFn({ method: "POST" })
     z.object({ operationId: z.string().uuid() }).parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+  const { supabase, userId } = context;
 
-    const pair = StellarSdk.Keypair.random();
-    const publicKey = pair.publicKey();
+  console.log("START WALLET CREATION");
 
-    // Fundeia via Friendbot (testnet)
-    const fb = await fetch(
-      `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`,
-    );
-    if (!fb.ok) {
-      throw new Error(`Friendbot falhou (${fb.status})`);
-    }
+  const pair = StellarSdk.Keypair.random();
+  const publicKey = pair.publicKey();
 
-    const { error } = await supabase
-      .from("operations")
-      .update({ operation_wallet: publicKey })
-      .eq("id", data.operationId)
-      .eq("user_id", userId);
+  console.log("KEYPAIR CREATED", publicKey);
 
-    if (error) throw new Error(error.message);
+  // FRIEND BOT TEMPORARIAMENTE DESABILITADO
 
-    return { publicKey };
-  });
+  const fb = await fetch(
+    `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`,
+  );
+
+  if (!fb.ok) {
+    throw new Error(`Friendbot falhou (${fb.status})`);
+  }
+
+
+  const { data: operation } = await supabase
+  .from("operations")
+  .select("*")
+  .eq("id", data.operationId)
+  .single();
+
+  if (!operation) {
+    const assetCode = `${operation.currency}TX`;
+    console.log("ASSET CODE", assetCode);
+    throw new Error("Operation not found");
+  }
+
+  
+
+  console.log("SAVING SUPABASE");
+
+  const { error } = await supabase
+    .from("operations")
+    .update({ operation_wallet: publicKey })
+    .eq("id", data.operationId)
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("SUPABASE ERROR", error);
+    throw new Error(error.message);
+  }
+
+  console.log("WALLET SAVED");
+
+  return { publicKey };
+})

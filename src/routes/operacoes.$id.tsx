@@ -141,7 +141,28 @@ function OperacaoDetail() {
       !!release_trigger &&
       current_operational_status === release_trigger;
     // eslint-disable-next-line no-console
-    console.log({ release_trigger, current_operational_status, matched });
+    // console.log({ release_trigger, current_operational_status, matched });
+
+
+    console.log("TRIGGER CHECK");
+    console.log("release_trigger:", release_trigger);
+    console.log(
+      "current_operational_status:",
+      current_operational_status
+    );
+    console.log("matched:", matched);
+    console.log("settlement:", settlement);
+    console.log(
+      "executeSettlement.isPending:",
+      executeSettlement.isPending
+    );
+    console.log(
+      "settlementStartedRef.current:",
+      settlementStartedRef.current
+    );
+
+
+
     if (!matched) return;
     if (settlement || executeSettlement.isPending) return;
     if (settlementStartedRef.current) return;
@@ -150,10 +171,15 @@ function OperacaoDetail() {
     (async () => {
       try {
         // 1. Marca status macro como liquidação em curso
+
+        console.log("STARTING SETTLEMENT FLOW");
+
         await operationsDb.update(id, { status: "SETTLEMENT_IN_PROGRESS" as never });
         qc.invalidateQueries({ queryKey: ["operations", "detail", id] });
 
         // 2. Executa settlement on-chain (wallet operacional já foi criada na validação da garantia)
+        console.log("CALLING executeSettlement");
+
         await executeSettlement.mutateAsync({ operationId: id, currency: op.currency });
       } catch (e) {
         console.error("SETTLEMENT FLOW ERROR", e);
