@@ -11,10 +11,38 @@
  */
 
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 const HORIZON = "https://horizon-testnet.stellar.org";
 const server = new StellarSdk.Horizon.Server(HORIZON);
+
+function createRuntimeAdminClient() {
+  const url = process.env.SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    const missing = [
+      ...(!url ? ["SUPABASE_URL"] : []),
+      ...(!serviceRoleKey ? ["SUPABASE_SERVICE_ROLE_KEY"] : []),
+    ];
+    throw new Error(`Missing Supabase environment variable(s): ${missing.join(", ")}.`);
+  }
+
+  return createClient<Database>(url, serviceRoleKey, {
+    auth: {
+      storage: undefined,
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
+let runtimeAdmin: ReturnType<typeof createRuntimeAdminClient> | undefined;
+function getRuntimeAdmin() {
+  runtimeAdmin ??= createRuntimeAdminClient();
+  return runtimeAdmin;
+}
 
 /** Mapeamento moeda fiduciária → asset operacional interno. */
 export function getAssetCode(currency: string): string {
@@ -23,9 +51,7 @@ export function getAssetCode(currency: string): string {
 }
 
 async function fundWithFriendbot(publicKey: string): Promise<void> {
-  const r = await fetch(
-    `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`,
-  );
+  const r = await fetch(`https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`);
   if (!r.ok && r.status !== 400) {
     // 400 = já existe (ok). Outros códigos = falha real.
     const txt = await r.text().catch(() => "");
@@ -48,6 +74,7 @@ export async function ensureIssuer(currency: string): Promise<{
 }> {
   const code = getAssetCode(currency);
 
+  const supabaseAdmin = getRuntimeAdmin();
   const { data: existing } = await supabaseAdmin
     .from("platform_assets" as never)
     .select("*")
@@ -71,13 +98,11 @@ export async function ensureIssuer(currency: string): Promise<{
   const issuer = StellarSdk.Keypair.random();
   await fundWithFriendbot(issuer.publicKey());
 
-  const { error } = await supabaseAdmin
-    .from("platform_assets" as never)
-    .insert({
-      code,
-      issuer_public: issuer.publicKey(),
-      issuer_secret: issuer.secret(),
-    } as never);
+  const { error } = await supabaseAdmin.from("platform_assets" as never).insert({
+    code,
+    issuer_public: issuer.publicKey(),
+    issuer_secret: issuer.secret(),
+  } as never);
 
   if (error) {
     // Race condition possível — re-tenta leitura.

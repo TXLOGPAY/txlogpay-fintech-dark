@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireCloudAuth } from "@/lib/cloud-auth-middleware";
 // NOTE: stellar-assets.server importado DINAMICAMENTE dentro do handler para
 // evitar vazamento de código server-only (supabaseAdmin / client.server)
 // para o bundle do browser via top-level imports.
@@ -19,7 +19,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  * settlement futuro possa assinar transações de saída.
  */
 export const createOperationWallet = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireCloudAuth])
   .inputValidator((input) =>
     z.object({ operationId: z.string().uuid() }).parse(input),
   )

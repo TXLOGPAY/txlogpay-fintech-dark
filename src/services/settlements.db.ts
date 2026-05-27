@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { executeSettlement as executeSettlementFn } from "@/lib/settlement.functions";
 
 export type Settlement = {
   id: string;
@@ -33,13 +32,8 @@ export const settlementsDb = {
     return (data as unknown as Settlement) ?? null;
   },
 
-  /**
-   * Dispara a liquidação tokenizada (server fn). Toda lógica Stellar
-   * — trustlines, transferência do asset operacional, persistência —
-   * acontece no servidor.
-   */
+  /** Chamadas de criação são feitas via useServerFn em useExecuteSettlement. */
   async createForOperation(operationId: string): Promise<Settlement> {
-    const result = await executeSettlementFn({ data: { operationId } });
-    return result as unknown as Settlement;
+    throw new Error(`createForOperation deve ser executado via server function (${operationId}).`);
   },
 };

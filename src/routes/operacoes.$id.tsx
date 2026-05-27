@@ -180,8 +180,7 @@ function OperacaoDetail() {
         // 2. Garante wallet operacional (fallback caso a validação anterior tenha falhado).
         if (!op.operation_wallet) {
           try {
-            const { createOperationWallet } = await import("@/lib/wallet.functions");
-            const res = await createOperationWallet({ data: { operationId: id } });
+            const res = await createWalletFn({ data: { operationId: id } });
             console.log("operation_wallet (fallback) criada:", res?.publicKey);
             qc.invalidateQueries({ queryKey: ["operations", "detail", id] });
           } catch (we) {
