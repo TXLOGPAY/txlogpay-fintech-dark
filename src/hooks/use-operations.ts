@@ -1,7 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { operationsDb, type DBOperation } from "@/services/operations.db";
 import { settlementsDb, type Settlement } from "@/services/settlements.db";
 import { useAuth } from "@/hooks/use-auth";
+import { createOperationWallet } from "@/lib/wallet.functions";
+import { executeSettlement } from "@/lib/settlement.functions";
 
 const KEYS = {
   all: ["operations"] as const,
@@ -57,14 +60,14 @@ export function useSubmitReceipt() {
  */
 export function useValidatePayment() {
   const qc = useQueryClient();
+  const createOperationWalletFn = useServerFn(createOperationWallet);
   return useMutation({
     mutationFn: async (id: string) => {
       const op = await operationsDb.validatePayment(id);
       // Cria wallet operacional logo após validar a garantia.
       if (!op.operation_wallet) {
         try {
-          const { createOperationWallet } = await import("@/lib/wallet.functions");
-          const res = await createOperationWallet({ data: { operationId: id } });
+          const res = await createOperationWalletFn({ data: { operationId: id } });
           // eslint-disable-next-line no-console
           console.log({ operationWalletCreated: res?.publicKey });
         } catch (e) {
@@ -88,9 +91,11 @@ export function useValidatePayment() {
  */
 export function useExecuteSettlement() {
   const qc = useQueryClient();
+  const executeSettlementFn = useServerFn(executeSettlement);
   return useMutation({
     mutationFn: async (args: { operationId: string; currency?: string }) => {
-      return settlementsDb.createForOperation(args.operationId);
+      const result = await executeSettlementFn({ data: { operationId: args.operationId } });
+      return result as unknown as Settlement;
     },
     onSuccess: (settlement) => {
       qc.invalidateQueries({ queryKey: ["operations"] });
