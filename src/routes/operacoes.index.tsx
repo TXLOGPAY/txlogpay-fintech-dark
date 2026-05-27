@@ -111,7 +111,7 @@ function OperacoesList() {
               </thead>
               <tbody>
                 {ops.map((o) => {
-                  const meta = STATUS_META[o.status as keyof typeof STATUS_META] ?? { label: o.status, color: "var(--muted-foreground)" };
+                  const meta = statusLabel(o);
                   return (
                     <tr key={o.id} className="border-b border-border/60 hover:bg-surface-container/50">
                       <td className="py-4 pr-4">
