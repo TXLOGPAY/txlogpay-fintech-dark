@@ -15,9 +15,31 @@ export const Route = createFileRoute("/operacoes/")({
 
 import { STATUS_META, isActive } from "@/domain/operation-status";
 
+const isSettled = (o: DBOperation) =>
+  o.settlement_status === "CONFIRMED" ||
+  o.status === "COMPLETED" ||
+  o.status === "PAYMENT_RELEASED";
+
+function statusLabel(o: DBOperation): { label: string; color: string } {
+  if (o.settlement_status === "CONFIRMED") {
+    return { label: "Liquidação concluída", color: "var(--success)" };
+  }
+  if (o.settlement_status === "PROCESSING") {
+    return { label: "Liquidação em curso", color: "var(--secondary)" };
+  }
+  if (o.settlement_status === "PENDING") {
+    return { label: "Aguardando liquidação", color: "var(--warning)" };
+  }
+  const meta = STATUS_META[o.status as keyof typeof STATUS_META];
+  return meta ? { label: meta.label, color: meta.color } : { label: o.status, color: "var(--muted-foreground)" };
+}
+
 function computeKpis(ops: DBOperation[], rates: FxRates, fxTimestamp: string | null) {
-  const active = ops.filter((o) => isActive(o.status) && o.status !== "COMPLETED" && o.status !== "PAYMENT_RELEASED");
-  const settled = ops.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
+  // Ativas = monitoradas e NÃO liquidadas
+  const active = ops.filter(
+    (o) => (o.status === "ACTIVE" || o.status === "OPERATION_MONITORING") && !isSettled(o),
+  );
+  const settled = ops.filter(isSettled);
   const protectedTotal = calculateProtectedTotal(active, rates, fxTimestamp);
   return { activeCount: active.length, settledCount: settled.length, protectedTotal, total: ops.length };
 }
