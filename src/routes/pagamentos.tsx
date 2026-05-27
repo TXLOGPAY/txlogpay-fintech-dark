@@ -20,20 +20,32 @@ export const Route = createFileRoute("/pagamentos")({
   component: Pagamentos,
 });
 
-// Estimativa institucional: carta de crédito tradicional ~ 2.5% sobre valor
-const TRADITIONAL_LC_RATE = 0.025;
+// Comparativo institucional: cartão internacional ~ 4.5% vs TXLOGPAY ~ 1.5%
+const TRADITIONAL_CARD_RATE = 0.045;
+const TXLOGPAY_EFFECTIVE_RATE = 0.015;
+
+const isSettled = (o: DBOperation) =>
+  o.settlement_status === "CONFIRMED" ||
+  o.status === "COMPLETED" ||
+  o.status === "PAYMENT_RELEASED";
 
 function computeFinancials(ops: DBOperation[], rates: FxRates, fxTimestamp: string | null) {
   const pending = ops.filter((o) => o.status === "PENDING_PAYMENT");
   const underReview = ops.filter((o) => o.status === "PAYMENT_UNDER_REVIEW");
-  const active = ops.filter((o) => o.status === "ACTIVE" || o.status === "OPERATION_MONITORING");
-  const completed = ops.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
+  // Garantia ativa: validadas e AINDA não liquidadas
+  const active = ops.filter(
+    (o) => (o.status === "ACTIVE" || o.status === "OPERATION_MONITORING") && !isSettled(o),
+  );
+  // Liberadas: settlement_status CONFIRMED
+  const completed = ops.filter(isSettled);
 
   const protectedActive = calculateProtectedTotal(active, rates, fxTimestamp);
   const released = calculateProtectedTotal(completed, rates, fxTimestamp);
   const transacted = calculateProtectedTotal([...active, ...completed], rates, fxTimestamp);
   const totalFees = calculateFinancialTotal(ops, getTotalFees, rates, fxTimestamp);
-  const savings = { ...transacted, amount: Math.max(0, transacted.amount * TRADITIONAL_LC_RATE - totalFees.amount) };
+  // Economia = (taxa cartão internacional - taxa TXLOGPAY) sobre o volume transacionado
+  const savingsAmount = Math.max(0, transacted.amount * (TRADITIONAL_CARD_RATE - TXLOGPAY_EFFECTIVE_RATE));
+  const savings = { ...transacted, amount: savingsAmount };
 
   return { pending, underReview, active, completed, protectedActive, released, transacted, totalFees, savings };
 }
