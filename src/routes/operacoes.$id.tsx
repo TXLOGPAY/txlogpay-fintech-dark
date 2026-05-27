@@ -283,11 +283,14 @@ function OperacaoDetail() {
       </motion.div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-        <Info label="Garantia protegida" value={formatCurrency(getProtectedAmount(op), op.currency)} />
+        <Info label="Valor da operação" value={formatCurrency(getProtectedAmount(op), op.currency)} />
         <Info label="Taxa TXLOGPAY" value={formatCurrency(Number(op.fee_amount), op.currency)} />
-        <Info label="Total pago" value={formatCurrency(Number(op.total_amount), op.currency)} highlight />
+        <Info label="Total pago pelo importador" value={formatCurrency(Number(op.total_amount), op.currency)} highlight />
         <Info label="Incoterm" value={op.incoterm || "—"} />
       </div>
+      <p className="mt-3 text-[11px] font-mono uppercase tracking-widest text-muted-foreground">
+        100% do valor protegido via escrow operacional
+      </p>
 
       <div className="grid lg:grid-cols-2 gap-5 mt-5">
         <div className="card-surface p-6">

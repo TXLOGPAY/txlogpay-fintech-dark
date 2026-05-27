@@ -24,9 +24,18 @@ export const Route = createFileRoute("/dashboard")({
 
 const TRADITIONAL_LC_RATE = 0.025;
 
+const isSettled = (o: DBOperation) =>
+  o.settlement_status === "CONFIRMED" ||
+  o.status === "COMPLETED" ||
+  o.status === "PAYMENT_RELEASED";
+
 function computeKpis(all: DBOperation[], rates: FxRates, fxTimestamp: string | null) {
-  const active = all.filter((o) => o.status === "ACTIVE" || o.status === "OPERATION_MONITORING");
-  const completed = all.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
+  // Garantia ativa = operações monitoradas e ainda NÃO liquidadas
+  const active = all.filter(
+    (o) => (o.status === "ACTIVE" || o.status === "OPERATION_MONITORING") && !isSettled(o),
+  );
+  // Concluídas = settlement_status CONFIRMED (auditável via Stellar)
+  const completed = all.filter(isSettled);
   const counted = [...active, ...completed];
   const protectedTotal = calculateProtectedTotal(active, rates, fxTimestamp);
   const volumeTotal = calculateProtectedTotal(counted, rates, fxTimestamp);

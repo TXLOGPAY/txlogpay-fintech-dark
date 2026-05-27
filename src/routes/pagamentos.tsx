@@ -20,20 +20,32 @@ export const Route = createFileRoute("/pagamentos")({
   component: Pagamentos,
 });
 
-// Estimativa institucional: carta de crédito tradicional ~ 2.5% sobre valor
-const TRADITIONAL_LC_RATE = 0.025;
+// Comparativo institucional: cartão internacional ~ 4.5% vs TXLOGPAY ~ 1.5%
+const TRADITIONAL_CARD_RATE = 0.045;
+const TXLOGPAY_EFFECTIVE_RATE = 0.015;
+
+const isSettled = (o: DBOperation) =>
+  o.settlement_status === "CONFIRMED" ||
+  o.status === "COMPLETED" ||
+  o.status === "PAYMENT_RELEASED";
 
 function computeFinancials(ops: DBOperation[], rates: FxRates, fxTimestamp: string | null) {
   const pending = ops.filter((o) => o.status === "PENDING_PAYMENT");
   const underReview = ops.filter((o) => o.status === "PAYMENT_UNDER_REVIEW");
-  const active = ops.filter((o) => o.status === "ACTIVE" || o.status === "OPERATION_MONITORING");
-  const completed = ops.filter((o) => o.status === "COMPLETED" || o.status === "PAYMENT_RELEASED");
+  // Garantia ativa: validadas e AINDA não liquidadas
+  const active = ops.filter(
+    (o) => (o.status === "ACTIVE" || o.status === "OPERATION_MONITORING") && !isSettled(o),
+  );
+  // Liberadas: settlement_status CONFIRMED
+  const completed = ops.filter(isSettled);
 
   const protectedActive = calculateProtectedTotal(active, rates, fxTimestamp);
   const released = calculateProtectedTotal(completed, rates, fxTimestamp);
   const transacted = calculateProtectedTotal([...active, ...completed], rates, fxTimestamp);
   const totalFees = calculateFinancialTotal(ops, getTotalFees, rates, fxTimestamp);
-  const savings = { ...transacted, amount: Math.max(0, transacted.amount * TRADITIONAL_LC_RATE - totalFees.amount) };
+  // Economia = (taxa cartão internacional - taxa TXLOGPAY) sobre o volume transacionado
+  const savingsAmount = Math.max(0, transacted.amount * (TRADITIONAL_CARD_RATE - TXLOGPAY_EFFECTIVE_RATE));
+  const savings = { ...transacted, amount: savingsAmount };
 
   return { pending, underReview, active, completed, protectedActive, released, transacted, totalFees, savings };
 }
@@ -100,7 +112,7 @@ function Pagamentos() {
             <Kpi icon={Clock}        label="Aguardando depósito" value={String(f.pending.length)} hint={`${f.pending.length} aguardando pagamento`} tone="chip-warning" />
             <Kpi icon={Shield}       label="Garantia ativa"      value={formatCurrency(f.protectedActive.amount, f.protectedActive.currency)} hint={`${f.active.length} operações monitoradas`} tone="chip-info" highlight tooltip={f.protectedActive.isConverted ? fxTooltip : undefined} />
             <Kpi icon={CheckCircle2} label="Pagamentos liberados" value={formatCurrency(f.released.amount, f.released.currency)} hint={`${f.completed.length} concluídas`} tone="chip-success" tooltip={f.released.isConverted ? fxTooltip : undefined} />
-            <Kpi icon={TrendingUp}   label="Economia gerada"      value={formatCurrency(f.savings.amount, f.savings.currency)} hint="vs. carta de crédito tradicional" tone="chip-cargo" tooltip={f.savings.isConverted ? fxTooltip : undefined} />
+            <Kpi icon={TrendingUp}   label="Economia gerada"      value={formatCurrency(f.savings.amount, f.savings.currency)} hint="vs. cartão internacional (~4.5%)" tone="chip-cargo" tooltip={f.savings.isConverted ? fxTooltip : undefined} />
           </div>
 
           <div className="grid xl:grid-cols-3 gap-5 mt-6">

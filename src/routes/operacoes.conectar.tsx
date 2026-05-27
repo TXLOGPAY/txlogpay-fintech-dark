@@ -712,17 +712,16 @@ function SidePanel({
         <div className="mt-4 space-y-2 text-sm p-3 rounded-xl glass">
           <BreakdownRow label="Valor da operação" value={formatCurrency(breakdown.gross_amount, currency)} />
           <BreakdownRow label="Taxa operacional" value={formatCurrency(breakdown.fee_amount, currency)} />
-          <BreakdownRow label="Garantia protegida" value={formatCurrency(breakdown.gross_amount, currency)} />
           <div className="h-px bg-border my-1" />
           <BreakdownRow
             label="Total a pagar"
             value={formatCurrency(breakdown.total_funding, currency)}
             highlight
           />
-          <div className="text-[10px] font-mono text-muted-foreground pt-1">
-            Garantia ao exportador: {formatCurrency(breakdown.gross_amount, currency)}
-          </div>
         </div>
+        <p className="mt-3 text-[10px] font-mono uppercase tracking-widest text-muted-foreground text-center">
+          Garantia integral protegida via escrow operacional
+        </p>
       </div>
 
       <div className="card-surface p-6">
