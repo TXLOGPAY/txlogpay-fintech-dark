@@ -8,7 +8,7 @@ import {
   CheckCircle2, Shield, Zap, FileText, Clock, Loader2,
   Upload, FileCheck2, X, ExternalLink, Sparkles, AlertTriangle,
   PackageCheck, Banknote, Truck, Landmark, Globe, ArrowRight, Radio, PlayCircle,
-  Receipt, Building2, ShieldCheck, Wallet,
+  Receipt, Building2, ShieldCheck,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
