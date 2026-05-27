@@ -561,18 +561,19 @@ type TimelineStage = {
 };
 
 function OperationTimeline({ op, settlement, siscomexStatus }: {
-  op: { status: string; created_at: string; updated_at: string; activated_at: string | null; payment_submitted_at: string | null };
+  op: {
+    status: string;
+    created_at: string;
+    updated_at: string;
+    activated_at: string | null;
+    payment_submitted_at: string | null;
+    payment_receipt_url?: string | null;
+    current_operational_status?: string | null;
+    release_trigger?: string | null;
+  };
   settlement: Settlement | null;
   siscomexStatus: { key: SiscomexKey; label: string } | null;
 }) {
-  const status = op.status;
-  const order = [
-    "PENDING_PAYMENT", "PAYMENT_UNDER_REVIEW",
-    "OPERATION_MONITORING", "ACTIVE",
-    "PAYMENT_RELEASED", "COMPLETED",
-  ];
-  const idx = order.indexOf(status);
-  const reached = (minIdx: number) => idx >= minIdx;
   const settledAt = settlement?.created_at ?? null;
   const settledOk = !!settlement?.successful;
 
@@ -580,12 +581,20 @@ function OperationTimeline({ op, settlement, siscomexStatus }: {
     ? `Status atual: ${siscomexStatus.label}`
     : "Status atual: aguardando primeiro evento Siscomex";
 
+  // Garantia aguardando depósito: concluído assim que existe comprovante.
+  const pendingDone = !!(op.payment_receipt_url || op.payment_submitted_at);
+  // Monitoramento operacional: concluído quando o status operacional casa o gatilho.
+  const monitoringDone =
+    !!op.current_operational_status &&
+    !!op.release_trigger &&
+    op.current_operational_status === op.release_trigger;
+
   const stages: TimelineStage[] = [
     { key: "registered", title: "Operação registrada", desc: "Processo operacional criado e vinculado ao Siscomex.", icon: FileText, at: op.created_at },
-    { key: "pending", title: "Garantia aguardando depósito", desc: "Aguardando pagamento via PIX, TED ou SWIFT.", icon: Banknote, at: reached(0) ? op.created_at : null },
+    { key: "pending", title: "Garantia aguardando depósito", desc: "Aguardando pagamento via PIX, TED ou SWIFT.", icon: Banknote, at: pendingDone ? (op.payment_submitted_at ?? op.created_at) : null },
     { key: "received", title: "Comprovante recebido", desc: "Comprovante enviado pelo importador.", icon: FileCheck2, at: op.payment_submitted_at },
     { key: "validated", title: "Garantia validada", desc: "Compliance confirmou os fundos em custódia.", icon: Shield, at: op.activated_at },
-    { key: "monitoring", title: "Monitoramento operacional", desc: monitoringDesc, icon: Truck, at: reached(2) ? op.activated_at : null },
+    { key: "monitoring", title: "Monitoramento operacional", desc: monitoringDesc, icon: Truck, at: monitoringDone ? (op.activated_at ?? op.updated_at) : null },
     { key: "settlement_started", title: "Liquidação internacional iniciada", desc: "Liquidação internacional disparada pelo motor de pagamentos.", icon: Radio, at: settledAt },
     { key: "settlement_confirmed", title: "Liquidação internacional confirmada", desc: "Rede internacional confirmou a liquidação dos fundos.", icon: Landmark, at: settledOk ? settledAt : null },
     { key: "settled", title: "Operação liquidada", desc: "Ciclo financeiro encerrado com sucesso.", icon: PackageCheck, at: settledOk ? settledAt : null },
@@ -594,6 +603,7 @@ function OperationTimeline({ op, settlement, siscomexStatus }: {
   // Determine which stage is "active" (the current one in progress).
   const lastDoneIdx = stages.reduce((acc, s, i) => (s.at ? i : acc), -1);
   const activeIdx = Math.min(lastDoneIdx + 1, stages.length - 1);
+  const status = op.status;
 
   return (
     <ol className="relative border-l border-border ml-3 space-y-5">
