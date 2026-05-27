@@ -1,13 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import {
-  createFundedWallet,
-  establishTrustline,
-  getAsset,
-  sendAsset,
-  toStellarAmount,
-} from "@/services/stellar-assets.server";
+// NOTE: stellar-assets.server importado DINAMICAMENTE dentro do handler para
+// evitar vazamento de código server-only (supabaseAdmin / client.server)
+// para o bundle do browser via top-level imports.
 
 /**
  * Cria a wallet operacional (custodial) na Stellar Testnet, estabelece
