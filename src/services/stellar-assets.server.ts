@@ -11,10 +11,38 @@
  */
 
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 const HORIZON = "https://horizon-testnet.stellar.org";
 const server = new StellarSdk.Horizon.Server(HORIZON);
+
+function createRuntimeAdminClient() {
+  const url = process.env.SUPABASE_URL ?? import.meta.env.VITE_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    const missing = [
+      ...(!url ? ["SUPABASE_URL"] : []),
+      ...(!serviceRoleKey ? ["SUPABASE_SERVICE_ROLE_KEY"] : []),
+    ];
+    throw new Error(`Missing Supabase environment variable(s): ${missing.join(", ")}.`);
+  }
+
+  return createClient<Database>(url, serviceRoleKey, {
+    auth: {
+      storage: undefined,
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
+let runtimeAdmin: ReturnType<typeof createRuntimeAdminClient> | undefined;
+function getRuntimeAdmin() {
+  runtimeAdmin ??= createRuntimeAdminClient();
+  return runtimeAdmin;
+}
 
 /** Mapeamento moeda fiduciária → asset operacional interno. */
 export function getAssetCode(currency: string): string {
@@ -48,6 +76,7 @@ export async function ensureIssuer(currency: string): Promise<{
 }> {
   const code = getAssetCode(currency);
 
+  const supabaseAdmin = getRuntimeAdmin();
   const { data: existing } = await supabaseAdmin
     .from("platform_assets" as never)
     .select("*")
