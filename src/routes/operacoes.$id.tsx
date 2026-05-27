@@ -45,13 +45,6 @@ import {
   STATUS_META, isActive, isPending, isUnderReview,
 } from "@/domain/operation-status";
 
-import {
-  isMonitoringCompleted,
-  hasSettlementStarted,
-  isSettlementCompleted,
-} from "@/lib/operation-status";
-
-
 export const Route = createFileRoute("/operacoes/$id")({
   head: ({ params }) => ({ meta: [{ title: `Operação ${params.id} — TXLOGPAY` }] }),
   component: OperacaoDetail,
@@ -146,10 +139,7 @@ function OperacaoDetail() {
     const matched =
       !!current_operational_status &&
       !!release_trigger &&
-      isMonitoringCompleted(
-          op?.current_operational_status,
-          op?.release_trigger,
-      );
+      current_operational_status === release_trigger;
     // eslint-disable-next-line no-console
     // console.log({ release_trigger, current_operational_status, matched });
 
@@ -585,9 +575,6 @@ function OperationTimeline({ op, settlement, siscomexStatus }: {
   const reached = (minIdx: number) => idx >= minIdx;
   const settledAt = settlement?.created_at ?? null;
   const settledOk = !!settlement?.successful;
-  
-  const settlementConfirmed =
-    settlement?.status === "CONFIRMED" || settledOk;
 
   const monitoringDesc = siscomexStatus
     ? `Status atual: ${siscomexStatus.label}`
@@ -595,32 +582,10 @@ function OperationTimeline({ op, settlement, siscomexStatus }: {
 
   const stages: TimelineStage[] = [
     { key: "registered", title: "Operação registrada", desc: "Processo operacional criado e vinculado ao Siscomex.", icon: FileText, at: op.created_at },
-    
-    { 
-      key: "pending",
-      title: "Garantia aguardando depósito",
-      desc: "Aguardando pagamento via PIX, TED ou SWIFT.",
-      icon: Banknote,
-      at:
-        op.payment_submitted_at ||
-        op.activated_at ||
-        (settlementConfirmed ? settledAt : null),
-    },
-
+    { key: "pending", title: "Garantia aguardando depósito", desc: "Aguardando pagamento via PIX, TED ou SWIFT.", icon: Banknote, at: reached(0) ? op.created_at : null },
     { key: "received", title: "Comprovante recebido", desc: "Comprovante enviado pelo importador.", icon: FileCheck2, at: op.payment_submitted_at },
     { key: "validated", title: "Garantia validada", desc: "Compliance confirmou os fundos em custódia.", icon: Shield, at: op.activated_at },
-    
-    { 
-      key: "monitoring",
-      title: "Monitoramento operacional",
-      desc: monitoringDesc,
-      icon: Truck,
-      at:
-        settlementConfirmed
-          ? settledAt
-          : op.activated_at,
-    },
-
+    { key: "monitoring", title: "Monitoramento operacional", desc: monitoringDesc, icon: Truck, at: reached(2) ? op.activated_at : null },
     { key: "settlement_started", title: "Liquidação internacional iniciada", desc: "Liquidação internacional disparada pelo motor de pagamentos.", icon: Radio, at: settledAt },
     { key: "settlement_confirmed", title: "Liquidação internacional confirmada", desc: "Rede internacional confirmou a liquidação dos fundos.", icon: Landmark, at: settledOk ? settledAt : null },
     { key: "settled", title: "Operação liquidada", desc: "Ciclo financeiro encerrado com sucesso.", icon: PackageCheck, at: settledOk ? settledAt : null },
@@ -677,7 +642,7 @@ function OperationTimeline({ op, settlement, siscomexStatus }: {
 
 function SettlementCard({ settlement, op }: { settlement: Settlement; op: DBOperation }) {
   const [open, setOpen] = useState(false);
-  const explorer = `https://stellar.expert/explorer/testnet/tx/${settlement.stellar_tx_hash}`;
+  const explorer = `https://stellar.expert/explorer/testnet/tx/${settlement.tx_hash}`;
   const ok = settlement.successful;
   const fiatCurrency = (settlement.operation_currency || op.currency || "USD").toUpperCase();
   const fiatAmount = Number(op.protected_amount ?? op.operation_value ?? 0);

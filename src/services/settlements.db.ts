@@ -1,6 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { executeStellarSettlement } from "@/services/stellar.service";
-import { getOperationalAsset } from "@/services/stellar-assets.service";
+import { executeStellarSettlement, getOperationalAsset } from "@/services/stellar.service";
 
 export type Settlement = {
   id: string;
@@ -83,15 +82,6 @@ export const settlementsDb = {
       .select("*")
       .single();
     if (error) throw error;
-
-    await supabase
-      .from("operations")
-      .update({
-        settlement_wallet: result.destinationWallet,
-        settlement_status: result.successful ? "CONFIRMED" : "FAILED",
-      })
-      .eq("id", operationId);
-
     return data as unknown as Settlement;
   },
 };
