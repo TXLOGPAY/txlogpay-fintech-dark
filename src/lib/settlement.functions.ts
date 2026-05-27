@@ -1,13 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import {
-  createFundedWallet,
-  establishTrustline,
-  getAsset,
-  sendAsset,
-  toStellarAmount,
-} from "@/services/stellar-assets.server";
+// stellar-assets.server importado DINAMICAMENTE dentro do handler — ver
+// wallet.functions.ts. Evita vazar supabaseAdmin para o bundle do browser.
 
 /**
  * Executa a liquidação internacional tokenizada.
