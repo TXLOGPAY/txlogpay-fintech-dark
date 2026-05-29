@@ -3,6 +3,7 @@ import { operationsDb, type DBOperation } from "@/services/operations.db";
 import { settlementsDb, type Settlement } from "@/services/settlements.db";
 import { useAuth } from "@/hooks/use-auth";
 
+
 const KEYS = {
   all: ["operations"] as const,
   active: ["operations", "active"] as const,
@@ -88,15 +89,14 @@ export function useValidatePayment() {
  */
 export function useExecuteSettlement() {
   const qc = useQueryClient();
-  const { user } = useAuth();
   return useMutation({
     mutationFn: async (args: { operationId: string; currency: string }) => {
-      if (!user?.id) throw new Error("Usuário não autenticado");
-      return settlementsDb.createForOperation(args.operationId, user.id, args.currency);
+      const { executeSettlement } = await import("@/lib/settlement.functions");
+      return executeSettlement({ data: args });
     },
     onSuccess: (settlement) => {
       qc.invalidateQueries({ queryKey: ["operations"] });
-      qc.invalidateQueries({ queryKey: ["settlement", settlement.operation_id] });
+      qc.invalidateQueries({ queryKey: ["settlement", (settlement as { operation_id: string }).operation_id] });
     },
   });
 }

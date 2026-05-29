@@ -7,6 +7,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { ACTIVE_STATUSES } from "@/domain/operation-status";
 import { getUsdRate } from "@/services/fx.service";
 import { getProtectedAmount } from "@/lib/financial-calculations";
+import { assertRateLimit, LIMITS } from "@/lib/rate-limiter";
 
 export type DBOperation = Database["public"]["Tables"]["operations"]["Row"] & {
   operation_currency?: string | null;
@@ -90,6 +91,11 @@ export const operationsDb = {
   async createPending(
     input: Omit<DBOperationInsert, "operation_code" | "status"> & Record<string, unknown>,
   ): Promise<DBOperation> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      assertRateLimit(`op:create:${user.id}`, LIMITS.OPERATION_CREATE.limit, LIMITS.OPERATION_CREATE.windowMs);
+    }
+
     const safe = pickAllowed(input) as Record<string, unknown>;
 
     // Regra financeira oficial:
@@ -164,6 +170,8 @@ export const operationsDb = {
   },
 
   async uploadReceipt(userId: string, operationId: string, file: File): Promise<string> {
+    assertRateLimit(`upload:${userId}`, LIMITS.RECEIPT_UPLOAD.limit, LIMITS.RECEIPT_UPLOAD.windowMs);
+
     const ext = file.name.split(".").pop() || "bin";
     const path = `${userId}/${operationId}-${Date.now()}.${ext}`;
     const { error } = await supabase.storage
